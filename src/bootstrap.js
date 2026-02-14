@@ -8,13 +8,9 @@ import { config } from "./config.js";
 import { createAgentService } from "./agent-service.js";
 import { createMemorySystemInjector } from "./memory-system.js";
 import { OpenCodeClient } from "./opencode-client.js";
-import {
-  ensureManagedAgentTools,
-  syncAgentConfigToolsToOpenCode
-} from "./tool-sync.js";
+import { syncOpenCodeConfig, syncOpenCodeSkills } from "./opencode-sync.js";
 import { createRouteHandler } from "./routes.js";
 import { SessionStore } from "./session-store.js";
-import { syncAgentConfigSkillsToOpenCode } from "./skill-sync.js";
 import { AgentWorkspace } from "./workspace.js";
 
 export const main = async () => {
@@ -37,25 +33,24 @@ export const main = async () => {
   await workspace.ensure();
   await sessionStore.ensure();
 
-  const toolConfig = await ensureManagedAgentTools(config.agent.configDir);
-  const toolSync = await syncAgentConfigToolsToOpenCode({
+  const openCodeSync = await syncOpenCodeConfig({
     agentConfigDir: config.agent.configDir,
     opencodeDirectory: config.opencode.directory
   });
   process.stdout.write(
-    `[agent-pa] tool sync: ${toolSync.syncedCount} tool(s), ${toolSync.removedCount} removed (${toolSync.targetDir})\n`
+    `[agent-pa] tool sync: ${openCodeSync.toolSync.syncedCount} file(s), ${openCodeSync.toolSync.removedCount} removed (${openCodeSync.toolSync.targetDir})\n`
   );
-  process.stdout.write(`[agent-pa] tool config dir: ${toolConfig.sourceDir}\n`);
+  process.stdout.write(`[agent-pa] tool config dir: ${openCodeSync.toolConfig.sourceDir}\n`);
 
   const syncSkills = () =>
-    syncAgentConfigSkillsToOpenCode({
-      agentConfigSkillsDir: workspace.summary().skillsDir,
+    syncOpenCodeSkills({
+      agentConfigDir: config.agent.configDir,
       opencodeDirectory: config.opencode.directory
     });
 
   const skillSync = await syncSkills();
   process.stdout.write(
-    `[agent-pa] skill sync: ${skillSync.syncedCount} skill(s), ${skillSync.removedCount} removed (${skillSync.targetDir})\n`
+    `[agent-pa] skill sync: ${skillSync.syncedCount} file(s), ${skillSync.removedCount} removed (${skillSync.targetDir})\n`
   );
 
   await opencodeClient.startServerIfConfigured();

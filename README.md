@@ -28,13 +28,11 @@ This project keeps the shell thin and delegates agent behavior to OpenCode over 
 - Agent config folder (`agent_config/`) with:
   - `memory/memory.md`
   - `system/system-prompt.md`
-  - `skills/*.md`
-  - `tools/*.js` (managed OpenCode tool definitions)
+  - `skills/` (copied to OpenCode as-is)
+  - `tools/` (copied to OpenCode as-is, including managed tool definitions)
   - `sessions/<sessionId>.json` for session metadata (one file per session)
-- Skills from `agent_config/skills/*.md` are mirrored into
-  `OPENCODE_DIRECTORY/.opencode/skills/agent-config-*/SKILL.md` on startup and after `/skill-new`.
-- Tools from `agent_config/tools/*.js` are mirrored into
-  `OPENCODE_DIRECTORY/.opencode/tools/*.js` on startup.
+- `agent_config/skills/` is copied to `OPENCODE_DIRECTORY/.opencode/skills/` on startup and after `/skill-new`.
+- `agent_config/tools/` is copied to `OPENCODE_DIRECTORY/.opencode/tools/` on startup.
 - Tool contract convention: each tool should return structured JSON with
   `ok: true` on success, or `ok: false` with an `error` field on failure.
 - Optional OpenCode autostart (`opencode serve`) controlled by env vars.
@@ -92,7 +90,7 @@ Commands:
 
 Memory is automatically injected as system context from `agent_config/memory/memory.md` for each prompt.
 A persistent system prompt can be set in `agent_config/system/system-prompt.md` (or via `/workspace/system`) and is prepended to each prompt.
-Runtime OpenCode extensions and mirrored skills live under `OPENCODE_DIRECTORY/.opencode/`.
+Runtime OpenCode extensions and copied skills/tools live under `OPENCODE_DIRECTORY/.opencode/`.
 
 ## Quick API smoke
 

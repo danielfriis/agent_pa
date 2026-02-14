@@ -109,10 +109,26 @@ export class AgentWorkspace {
 
   async listSkills() {
     const entries = await fs.readdir(this.skillsDir, { withFileTypes: true });
-    return entries
-      .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith(".md"))
-      .map((entry) => entry.name)
-      .sort();
+    const names = [];
+
+    for (const entry of entries) {
+      if (entry.isFile() && entry.name.toLowerCase().endsWith(".md")) {
+        names.push(entry.name);
+        continue;
+      }
+
+      if (!entry.isDirectory()) continue;
+      const skillDir = path.join(this.skillsDir, entry.name);
+      const skillDirEntries = await fs.readdir(skillDir, { withFileTypes: true });
+      const hasSkillFile = skillDirEntries.some(
+        (skillEntry) => skillEntry.isFile() && skillEntry.name.toLowerCase() === "skill.md"
+      );
+      if (hasSkillFile) {
+        names.push(entry.name);
+      }
+    }
+
+    return names.sort((a, b) => a.localeCompare(b));
   }
 
   async createSkill(name) {

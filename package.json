@@ -8,7 +8,7 @@
     "start": "npm run start:server",
     "start:server": "node src/server.js --no-chat",
     "start:terminal": "node src/server.js --chat",
-    "check": "node --check src/server.js && node --check src/bootstrap.js && node --check src/routes.js && node --check src/chat.js && node --check src/agent-service.js && node --check src/message-utils.js && node --check src/memory-system.js && node --check src/path-utils.js && node --check src/config.js && node --check src/opencode-client.js && node --check src/session-store.js && node --check src/workspace.js && node --check src/skill-sync.js && node --check src/tool-sync.js && node --check src/remember-command.js"
+    "check": "node --check src/server.js && node --check src/bootstrap.js && node --check src/routes.js && node --check src/chat.js && node --check src/agent-service.js && node --check src/message-utils.js && node --check src/memory-system.js && node --check src/path-utils.js && node --check src/config.js && node --check src/opencode-client.js && node --check src/session-store.js && node --check src/workspace.js && node --check src/opencode-sync.js && node --check src/remember-command.js"
   },
   "engines": {
     "node": ">=20.0.0"

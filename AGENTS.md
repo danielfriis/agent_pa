@@ -9,7 +9,7 @@
 5. Keep the codebase DRY by extracting shared behavior into reusable modules, functions, or utilities.
 6. We are currently in a build-out phase, so migrations are not required right now. This is temporary and should stay easy to revise later.
 7. After reorganizations, clean up legacy files, directories, and stale references so old and new structures do not coexist unintentionally.
-8. Keep naming symmetrical across related modules. For sync modules, use consistent pairs like `skill-sync.js` and `tool-sync.js`, with matching verb patterns in exported function names.
+8. Prefer the simplest architecture that satisfies requirements. Minimize file/module sprawl and indirection; split modules only when there is clear reuse or boundary value.
 9. Prefer uniform sync contracts. Sync functions should return the same shape when possible: `{ syncedCount, removedCount, sourceDir, targetDir }`.
 10. Keep entrypoints thin. `server.js` should stay a minimal startup wrapper; routing, chat flow, and bootstrapping belong in dedicated modules.
 11. Extract shared helpers (for example path normalization) into utility modules instead of duplicating logic across files.
@@ -19,3 +19,5 @@
 15. Do not add heuristic post-response detection to infer whether side effects happened; rely on explicit tool result contracts and propagate those results directly.
 16. After cleanup/refactor work, run the project checks (`npm run check`) before finalizing.
 17. If runtime behavior suddenly diverges from recent code changes (for example schema errors, missing capabilities, or stale responses), treat a stale OpenCode daemon as a common cause and fully restart it before deeper debugging.
+18. When a new stable user preference is learned, update `AGENTS.md` in the same change so future work applies it by default.
+19. Capture learned preferences as general principles that apply across tasks, not as one-off instructions tied to a single implementation.
