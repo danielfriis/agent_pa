@@ -1,0 +1,5 @@
+node_modules
+data
+agent_workspace
+agent_config
+.env
