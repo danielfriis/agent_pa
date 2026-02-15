@@ -1,0 +1,18 @@
+[Unit]
+Description=agent_pa runtime service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/opt/agent-pa
+Environment=NODE_ENV=production
+EnvironmentFile=/opt/agent-pa/.env
+ExecStart=/usr/bin/npm run start:server
+Restart=always
+RestartSec=5
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=multi-user.target

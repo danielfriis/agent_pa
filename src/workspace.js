@@ -95,7 +95,21 @@ export class AgentWorkspace {
 
   async readSystemPrompt() {
     try {
-      return await fs.readFile(this.systemPromptFile, "utf8");
+      const entries = await fs.readdir(this.systemDir, { withFileTypes: true });
+      const markdownFiles = entries
+        .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith(".md"))
+        .map((entry) => entry.name)
+        .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+
+      if (!markdownFiles.length) return "";
+
+      const contents = await Promise.all(
+        markdownFiles.map((name) => fs.readFile(path.join(this.systemDir, name), "utf8"))
+      );
+      return contents
+        .map((content) => content.trim())
+        .filter(Boolean)
+        .join("\n\n");
     } catch {
       return "";
     }

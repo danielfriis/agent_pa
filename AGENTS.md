@@ -1,23 +1,75 @@
 # AGENTS.md
 
-## Engineering Directives
+## Project Overview
 
-1. Organize the codebase into small, focused, composable modules with clear boundaries.
-2. Keep naming clear, consistent, and logical across files, modules, functions, and variables.
-3. Think of the overall system as a set of products/components (`tools`, `skills`, `memory`, workflows, etc.) with explicit contracts so each part can evolve and scale independently.
-4. Before writing code that uses dependencies, check their documentation and prefer idiomatic patterns.
-5. Keep the codebase DRY by extracting shared behavior into reusable modules, functions, or utilities.
-6. We are currently in a build-out phase, so migrations are not required right now. This is temporary and should stay easy to revise later.
-7. After reorganizations, clean up legacy files, directories, and stale references so old and new structures do not coexist unintentionally.
-8. Prefer the simplest architecture that satisfies requirements. Minimize file/module sprawl and indirection; split modules only when there is clear reuse or boundary value.
-9. Prefer uniform sync contracts. Sync functions should return the same shape when possible: `{ syncedCount, removedCount, sourceDir, targetDir }`.
-10. Keep entrypoints thin. `server.js` should stay a minimal startup wrapper; routing, chat flow, and bootstrapping belong in dedicated modules.
-11. Extract shared helpers (for example path normalization) into utility modules instead of duplicating logic across files.
-12. When renaming or reorganizing, update all imports, scripts, and docs in the same change so old and new naming does not coexist.
-13. Never use unstructured free text as an execution contract for side effects; side effects must go through explicit, typed interfaces (commands, APIs, events, or tool contracts).
-14. Standardize tool result contracts: tools should return structured JSON with `ok: true` on success or `ok: false` with an `error` message on failure.
-15. Do not add heuristic post-response detection to infer whether side effects happened; rely on explicit tool result contracts and propagate those results directly.
-16. After cleanup/refactor work, run the project checks (`npm run check`) before finalizing.
-17. If runtime behavior suddenly diverges from recent code changes (for example schema errors, missing capabilities, or stale responses), treat a stale OpenCode daemon as a common cause and fully restart it before deeper debugging.
-18. When a new stable user preference is learned, update `AGENTS.md` in the same change so future work applies it by default.
-19. Capture learned preferences as general principles that apply across tasks, not as one-off instructions tied to a single implementation.
+This project is an agent for people to complete many different tasks. Each agent operates inside a workspace and has access to tools, memory, and skills.
+
+## Core Concepts
+
+- Workspace: the operating directory and local state boundary where the agent reads, writes, and executes.
+- Skills: reusable instruction bundles that guide how the agent handles specific task types.
+- Tools: explicit integrations and side-effect interfaces the agent can call.
+- Memory: persisted context/preferences used to keep behavior consistent over time.
+- Channels: user interaction surfaces that connect to the same agent service contract. Current channel is terminal chat; future channels should plug in without changing core agent logic.
+- Installation: the reproducible setup path that provisions dependencies, configuration, security defaults, and service wiring for local and remote environments.
+
+## Scope
+
+- Node.js 20+, ESM modules.
+- HTTP + terminal agent runtime with a swappable brain integration (currently OpenCode).
+
+## Architecture
+
+1. Productize and modularize each core capability as its own component with explicit contracts: brain integration, workspace, tools, skills, memory, installation, and transport/channel layers.
+2. Keep the brain integration behind a stable adapter boundary so OpenCode can be replaced later without rewriting the whole system.
+3. Keep modules small, focused, and composable.
+4. Keep `src/server.js` as startup wiring only.
+5. Keep boundaries explicit:
+   - Routes: request/response + validation.
+   - Services: orchestration and business flow.
+   - Utilities: shared stateless helpers.
+6. Split files only for clear boundary or reuse value.
+7. Treat architecture as a top priority; always assess architectural impact before implementing.
+8. After implementation, review the result against the architecture and refine it if needed.
+
+## Contracts
+
+1. Side effects must use explicit interfaces (tools/APIs/events), never free-text contracts.
+2. Tool results must be structured:
+   - Success: `{ ok: true, ... }`
+   - Failure: `{ ok: false, error: "..." }`
+3. Do not use heuristic post-response detection for side effects.
+4. Prefer stable response shapes.
+5. Sync functions should return `{ syncedCount, removedCount, sourceDir, targetDir }` when applicable.
+
+## Code Quality
+
+1. Prefer simple designs, clear naming, and DRY shared helpers.
+2. Follow dependency docs and idiomatic patterns.
+3. During refactors/reorgs, update imports/scripts/tests/docs in the same change.
+4. Remove stale files and references after reorganizing.
+5. Build-out phase: migrations are optional; keep data structures easy to revise.
+
+## Testing and Operations
+
+1. Add or update tests for behavior changes; include regression tests for bug fixes when practical.
+2. Run `npm run check` after cleanup/refactor work and before finalizing substantial changes.
+3. If behavior diverges unexpectedly, restart the OpenCode daemon before deeper debugging.
+
+## Security and Documentation
+
+1. Never commit secrets; use environment variables and keep secrets out of logs/sessions.
+2. Validate external input at route boundaries and return clear, structured errors.
+3. Keep README and operational docs aligned with behavior.
+4. When a stable preference is learned, update this file with a general rule (not a one-off).
+
+## Lessons Log
+
+1. Keep a root-level file named `LESSONS.md`.
+2. Every time the coding agent makes a technical assumption (implementation, behavior, tooling, or debugging) that turns out to be wrong, append a new entry to `LESSONS.md` in the same change.
+3. Do not log non-technical preference corrections (tone, naming style, or wording preferences) in `LESSONS.md`.
+4. Each entry should include:
+   - Date
+   - Incorrect assumption
+   - What was actually true
+   - Adjustment to prevent the same mistake

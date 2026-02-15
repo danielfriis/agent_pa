@@ -26,13 +26,17 @@ export const config = {
     workspaceDir: agentWorkspaceDir,
     configDir: agentConfigDir
   },
-  workspace: {
-    rootDir: agentConfigDir,
-    memoryMaxChars: int(process.env.MEMORY_MAX_CHARS, 6000)
+  memory: {
+    maxChars: int(process.env.MEMORY_MAX_CHARS, 6000)
   },
   app: {
     host: process.env.APP_HOST || "127.0.0.1",
     port: int(process.env.APP_PORT, 8787)
+  },
+  security: {
+    requireAuth: bool(process.env.APP_REQUIRE_AUTH, Boolean(process.env.APP_API_TOKEN)),
+    apiToken: process.env.APP_API_TOKEN || "",
+    allowUnauthenticatedHealth: bool(process.env.APP_ALLOW_UNAUTHENTICATED_HEALTH, true)
   },
   sessionStore: {
     sessionsDir: path.resolve(process.env.STORE_DIR || path.resolve(agentConfigDir, "sessions"))

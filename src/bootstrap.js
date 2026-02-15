@@ -14,13 +14,17 @@ import { SessionStore } from "./session-store.js";
 import { AgentWorkspace } from "./workspace.js";
 
 export const main = async () => {
+  if (config.security.requireAuth && !config.security.apiToken) {
+    throw new Error("APP_REQUIRE_AUTH=true requires APP_API_TOKEN to be set.");
+  }
+
   // Ensure child processes (OpenCode + tools) receive absolute workspace/config paths.
   process.env.AGENT_CONFIG_DIR = config.agent.configDir;
   process.env.AGENT_WORKSPACE_DIR = config.agent.workspaceDir;
   process.env.OPENCODE_DIRECTORY = config.opencode.directory;
 
   const opencodeClient = new OpenCodeClient(config.opencode);
-  const workspace = new AgentWorkspace(config.workspace.rootDir, config.workspace.memoryMaxChars);
+  const workspace = new AgentWorkspace(config.agent.configDir, config.memory.maxChars);
   const sessionStore = new SessionStore(config.sessionStore);
   const withMemorySystem = createMemorySystemInjector(workspace);
   const agentService = createAgentService({
@@ -33,6 +37,12 @@ export const main = async () => {
   await workspace.ensure();
   await sessionStore.ensure();
 
+  const syncSkills = () =>
+    syncOpenCodeSkills({
+      agentConfigDir: config.agent.configDir,
+      opencodeDirectory: config.opencode.directory
+    });
+
   const openCodeSync = await syncOpenCodeConfig({
     agentConfigDir: config.agent.configDir,
     opencodeDirectory: config.opencode.directory
@@ -41,26 +51,17 @@ export const main = async () => {
     `[agent-pa] tool sync: ${openCodeSync.toolSync.syncedCount} file(s), ${openCodeSync.toolSync.removedCount} removed (${openCodeSync.toolSync.targetDir})\n`
   );
   process.stdout.write(`[agent-pa] tool config dir: ${openCodeSync.toolConfig.sourceDir}\n`);
-
-  const syncSkills = () =>
-    syncOpenCodeSkills({
-      agentConfigDir: config.agent.configDir,
-      opencodeDirectory: config.opencode.directory
-    });
-
-  const skillSync = await syncSkills();
   process.stdout.write(
-    `[agent-pa] skill sync: ${skillSync.syncedCount} file(s), ${skillSync.removedCount} removed (${skillSync.targetDir})\n`
+    `[agent-pa] skill sync: ${openCodeSync.skillSync.syncedCount} file(s), ${openCodeSync.skillSync.removedCount} removed (${openCodeSync.skillSync.targetDir})\n`
   );
 
   await opencodeClient.startServerIfConfigured();
 
   const route = createRouteHandler({
     opencodeClient,
-    sessionStore,
     workspace,
     config,
-    withMemorySystem
+    agentService
   });
 
   const server = http.createServer((req, res) => {

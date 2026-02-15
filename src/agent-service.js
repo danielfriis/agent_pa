@@ -1,6 +1,7 @@
 import {
   extractText,
   latestAssistantRaw,
+  normalizeMessages,
   readAssistantReplyFromHistory,
   summarizeLatestAssistantInfo,
   summarizeRecentMessages
@@ -15,6 +16,11 @@ const isValidModel = (value) =>
       typeof value.modelID === "string" &&
       value.modelID
   );
+
+const isOpenCodeUnavailable = (error) => {
+  const detail = error instanceof Error ? error.message : String(error);
+  return detail.includes("fetch failed") || detail.includes("ECONNREFUSED");
+};
 
 export const createAgentService = ({
   opencodeClient,
@@ -42,6 +48,37 @@ export const createAgentService = ({
       channel
     });
     return session;
+  };
+
+  const listSessions = async () => {
+    const local = await sessionStore.listSessions();
+    let remote = [];
+    let unavailableMessage = null;
+    try {
+      remote = await opencodeClient.listSessions();
+    } catch (error) {
+      if (isOpenCodeUnavailable(error)) {
+        unavailableMessage = error instanceof Error ? error.message : String(error);
+      } else {
+        throw error;
+      }
+    }
+
+    const localById = new Map(local.map((item) => [item.id, item]));
+    const merged = (remote || []).map((session) => ({
+      ...session,
+      local: localById.get(session.id) || null
+    }));
+    if (!merged.length && local.length) {
+      merged.push(...local.map((item) => ({ id: item.id, local: item, offlineOnly: true })));
+    }
+
+    return unavailableMessage ? { sessions: merged, warning: unavailableMessage } : { sessions: merged };
+  };
+
+  const listMessages = async (sessionId) => {
+    const messages = await opencodeClient.listMessages(sessionId);
+    return normalizeMessages(messages);
   };
 
   const sendUserMessage = async ({
@@ -106,6 +143,8 @@ export const createAgentService = ({
 
   return {
     waitForOpenCode,
+    listSessions,
+    listMessages,
     createSession,
     sendUserMessage
   };
