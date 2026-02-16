@@ -182,20 +182,39 @@ health_check() {
   local app_token
   local allow_unauthenticated_health
   local url
+  local attempts
+  local delay_seconds
+  local attempt
+  local -a curl_args
 
   app_port="$(read_env_var APP_PORT)"
   app_token="$(read_env_var APP_API_TOKEN)"
   allow_unauthenticated_health="$(read_env_var APP_ALLOW_UNAUTHENTICATED_HEALTH)"
   [[ -n "${app_port}" ]] || app_port="8787"
   url="http://127.0.0.1:${app_port}/health"
+  attempts="${HEALTHCHECK_ATTEMPTS:-20}"
+  delay_seconds="${HEALTHCHECK_DELAY_SECONDS:-1}"
+  curl_args=(-fsS)
 
   if [[ "${allow_unauthenticated_health}" == "false" && -n "${app_token}" ]]; then
-    curl -fsS -H "Authorization: Bearer ${app_token}" "${url}" >/dev/null
-  else
-    curl -fsS "${url}" >/dev/null
+    curl_args+=(-H "Authorization: Bearer ${app_token}")
   fi
+  curl_args+=("${url}")
 
-  log "Health check passed: ${url}"
+  for ((attempt = 1; attempt <= attempts; attempt += 1)); do
+    if curl "${curl_args[@]}" >/dev/null; then
+      log "Health check passed (attempt ${attempt}/${attempts}): ${url}"
+      return
+    fi
+    if (( attempt < attempts )); then
+      sleep "${delay_seconds}"
+    fi
+  done
+
+  log "Health check failed after ${attempts} attempts: ${url}"
+  sudo systemctl --no-pager --lines=40 status "${SERVICE_NAME}" || true
+  sudo journalctl -u "${SERVICE_NAME}" --no-pager -n 120 || true
+  fail "Application is not reachable at ${url}"
 }
 
 main() {

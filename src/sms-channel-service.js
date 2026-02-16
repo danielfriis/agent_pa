@@ -247,7 +247,9 @@ export const createSmsChannelService = ({ agentService, sessionStore, config }) 
         createdSession: session.created,
         response: buildReplyPayload(assistantReplyMessages)
       };
-    } catch {
+    } catch (error) {
+      const detail = error instanceof Error ? error.stack || error.message : String(error);
+      process.stderr.write(`[agent-pa] sms inbound failed: ${detail}\n`);
       return {
         ok: true,
         status: 200,

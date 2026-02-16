@@ -81,6 +81,19 @@ export const createAgentService = ({
     return normalizeMessages(messages);
   };
 
+  const sendMessageWithRecovery = async (sessionId, payload) => {
+    try {
+      return await opencodeClient.sendMessage(sessionId, payload);
+    } catch (error) {
+      if (!isOpenCodeUnavailable(error)) throw error;
+
+      const ready = await waitForOpenCode();
+      if (!ready) throw error;
+
+      return opencodeClient.sendMessage(sessionId, payload);
+    }
+  };
+
   const sendUserMessage = async ({
     sessionId,
     text,
@@ -104,7 +117,7 @@ export const createAgentService = ({
 
     payload = await withMemorySystem(payload, system);
 
-    const result = await opencodeClient.sendMessage(sessionId, payload);
+    const result = await sendMessageWithRecovery(sessionId, payload);
     let assistantText = extractText(result?.parts || []);
     let assistantPartTypes = [];
 
