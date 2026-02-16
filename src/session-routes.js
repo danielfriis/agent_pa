@@ -1,7 +1,18 @@
 import { sendJson, readJsonBody } from "./http-utils.js";
+import {
+  parseSharedChatCommand,
+  sharedChatCommandHelpText
+} from "./shared-chat-commands.js";
 
 const latestAssistantMessage = (messages) =>
   [...messages].reverse().find((message) => message.role === "assistant") || null;
+
+const buildCommandAssistant = (text) => ({
+  id: null,
+  role: "assistant",
+  time: null,
+  text
+});
 
 export const createSessionRouteHandler = ({ agentService }) => async (req, res, path) => {
   if (req.method === "GET" && path === "/sessions") {
@@ -27,6 +38,49 @@ export const createSessionRouteHandler = ({ agentService }) => async (req, res, 
     if (typeof body.text !== "string" || !body.text.trim()) {
       sendJson(res, 400, { error: "Body must include string field `text`." });
       return true;
+    }
+
+    const command = parseSharedChatCommand(body.text);
+    if (command.isCommand) {
+      if (command.name === "help") {
+        const messages = await agentService.listMessages(sessionId);
+        sendJson(res, 200, {
+          sessionId,
+          assistant: buildCommandAssistant(sharedChatCommandHelpText()),
+          assistantPartTypes: [],
+          diagnostics: null,
+          messages
+        });
+        return true;
+      }
+
+      if (command.name === "session") {
+        const messages = await agentService.listMessages(sessionId);
+        sendJson(res, 200, {
+          sessionId,
+          assistant: buildCommandAssistant(`Current session: ${sessionId}`),
+          assistantPartTypes: [],
+          diagnostics: null,
+          messages
+        });
+        return true;
+      }
+
+      if (command.name === "session-new") {
+        const created = await agentService.createSession({
+          title: command.title || `API chat ${new Date().toISOString()}`,
+          channel: "api"
+        });
+        const messages = await agentService.listMessages(created.id);
+        sendJson(res, 200, {
+          sessionId: created.id,
+          assistant: buildCommandAssistant(`Started new session: ${created.id}`),
+          assistantPartTypes: [],
+          diagnostics: null,
+          messages
+        });
+        return true;
+      }
     }
 
     const reply = await agentService.sendUserMessage({

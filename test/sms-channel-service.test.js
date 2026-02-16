@@ -122,6 +122,64 @@ test("sms channel creates a session then reuses it for same provider/account/to/
   );
 });
 
+test("sms channel /session-new creates a new session and rebinds later messages", async () => {
+  const createdSessions = [];
+  const sentMessages = [];
+  const sessionStore = createMockSessionStore();
+  let nextId = 1;
+  const agentService = {
+    createSession: async (args) => {
+      createdSessions.push(args);
+      return { id: `ses_${nextId++}`, title: args.title };
+    },
+    sendUserMessage: async (args) => {
+      sentMessages.push(args);
+      return { assistantText: "ok" };
+    }
+  };
+  const service = createSmsChannelService({
+    agentService,
+    sessionStore,
+    config: createSmsConfig()
+  });
+
+  const first = await service.handleInboundWebhook({
+    headers: {},
+    form: twilioForm({ Body: "hello" }),
+    path: "/channels/sms/inbound",
+    queryString: ""
+  });
+  const rotate = await service.handleInboundWebhook({
+    headers: {},
+    form: twilioForm({ Body: "/session-new Deep work", MessageSid: "SM124" }),
+    path: "/channels/sms/inbound",
+    queryString: ""
+  });
+  const afterRotate = await service.handleInboundWebhook({
+    headers: {},
+    form: twilioForm({ Body: "continue", MessageSid: "SM125" }),
+    path: "/channels/sms/inbound",
+    queryString: ""
+  });
+
+  assert.equal(first.ok, true);
+  assert.equal(rotate.ok, true);
+  assert.equal(afterRotate.ok, true);
+  assert.equal(first.sessionId, "ses_1");
+  assert.equal(rotate.sessionId, "ses_2");
+  assert.equal(afterRotate.sessionId, "ses_2");
+  assert.equal(sentMessages.length, 2);
+  assert.equal(sentMessages[0].sessionId, "ses_1");
+  assert.equal(sentMessages[1].sessionId, "ses_2");
+  assert.deepEqual(createdSessions, [
+    { title: "SMS +15550001111 -> +15559998888", channel: "sms:twilio" },
+    { title: "Deep work", channel: "sms:twilio" }
+  ]);
+  assert.deepEqual(extractTwilioMessages(rotate.response.body), [
+    "Started new session: ses_2"
+  ]);
+});
+
 test("sms channel rejects inbound messages for destination numbers outside allowlist", async () => {
   const sessionStore = createMockSessionStore();
   const agentService = {

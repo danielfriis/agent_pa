@@ -251,6 +251,52 @@ test("POST /sessions/:id/message delegates message handling to agentService", as
   assert.equal(response.json.assistant.text, "world");
 });
 
+test("POST /sessions/:id/message handles /session without sending a user message", async () => {
+  const { route, calls } = buildRoute();
+  const response = await invoke(route, {
+    method: "POST",
+    url: "/sessions/ses_1/message",
+    body: { text: "/session" }
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(calls.sendUserMessage, []);
+  assert.deepEqual(calls.listMessages, ["ses_1"]);
+  assert.equal(response.json.sessionId, "ses_1");
+  assert.equal(response.json.assistant.text, "Current session: ses_1");
+});
+
+test("POST /sessions/:id/message handles /session-new and returns the created session id", async () => {
+  const createSessionCalls = [];
+  const listMessageCalls = [];
+  const { route, calls } = buildRoute({
+    agentService: {
+      createSession: async (args) => {
+        createSessionCalls.push(args);
+        return { id: "ses_2", title: args.title || "Untitled" };
+      },
+      listMessages: async (sessionId) => {
+        listMessageCalls.push(sessionId);
+        return [];
+      }
+    }
+  });
+
+  const response = await invoke(route, {
+    method: "POST",
+    url: "/sessions/ses_1/message",
+    body: { text: "/session-new Product planning" }
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(calls.sendUserMessage, []);
+  assert.deepEqual(createSessionCalls, [{ title: "Product planning", channel: "api" }]);
+  assert.deepEqual(listMessageCalls, ["ses_2"]);
+  assert.equal(response.json.sessionId, "ses_2");
+  assert.equal(response.json.assistant.text, "Started new session: ses_2");
+  assert.deepEqual(response.json.messages, []);
+});
+
 test("POST /sessions/:id/message prefers fallback text when latest assistant message is empty", async () => {
   const { route } = buildRoute({
     agentService: {

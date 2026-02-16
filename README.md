@@ -154,7 +154,7 @@ When started with `npm run start:terminal`:
 
 Commands:
 - `/help`
-- `/new [title]`
+- `/session-new [title]`
 - `/model providerID/modelID`
 - `/session`
 - `/workspace`
@@ -163,6 +163,11 @@ Commands:
 - `/skills`
 - `/skill-new NAME`
 - `/exit`
+
+Shared chat commands (available in terminal chat, SMS inbound messages, and `POST /sessions/:id/message`):
+- `/help`
+- `/session`
+- `/session-new [title]`
 
 Memory is automatically injected as system context from `agent_config/memory/memory.md` for each prompt.
 All markdown files in `agent_config/system/` are loaded in filename order and prepended to each prompt. `POST /state/system` writes to `agent_config/system/system-prompt.md`.

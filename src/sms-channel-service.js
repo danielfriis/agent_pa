@@ -3,6 +3,10 @@ import {
   createTwilioSignatureUrl,
   createTwilioSmsAdapter
 } from "./sms-provider-twilio.js";
+import {
+  parseSharedChatCommand,
+  sharedChatCommandHelpText
+} from "./shared-chat-commands.js";
 
 const trimToString = (value) => String(value || "").trim();
 
@@ -130,6 +134,25 @@ const mergeSmsBinding = async (sessionStore, sessionId, patch) => {
   });
 };
 
+const unbindConversationKeyFromOtherSessions = async (
+  sessionStore,
+  conversationKey,
+  keepSessionId
+) => {
+  const sessions = await sessionStore.listSessions();
+  const matches = sessions.filter(
+    (session) =>
+      session?.id &&
+      session.id !== keepSessionId &&
+      session?.channelBindings?.sms?.conversationKey === conversationKey
+  );
+  for (const session of matches) {
+    await mergeSmsBinding(sessionStore, session.id, {
+      conversationKey: ""
+    });
+  }
+};
+
 const buildSmsSystemPrompt = ({ defaultPrompt, event, maxReplyChars }) =>
   [
     trimToString(defaultPrompt),
@@ -249,6 +272,81 @@ export const createSmsChannelService = ({ agentService, sessionStore, config }) 
     });
 
     try {
+      const command = parseSharedChatCommand(event.text);
+      if (command.isCommand) {
+        if (command.name === "help") {
+          const replyMessages = splitTextForSmsMessages(
+            normalizeSmsText(sharedChatCommandHelpText()),
+            smsConfig.maxReplyChars
+          );
+          return {
+            ok: true,
+            status: 200,
+            sessionId: null,
+            conversationKey,
+            createdSession: false,
+            response: buildReplyPayload(replyMessages)
+          };
+        }
+
+        if (command.name === "session") {
+          const existing = await findSessionForConversation(conversationKey);
+          const sessionText = existing?.id
+            ? `Current session: ${existing.id}`
+            : "No active session. Use /session-new [title] to start one.";
+          const replyMessages = splitTextForSmsMessages(
+            normalizeSmsText(sessionText),
+            smsConfig.maxReplyChars
+          );
+          return {
+            ok: true,
+            status: 200,
+            sessionId: existing?.id || null,
+            conversationKey,
+            createdSession: false,
+            response: buildReplyPayload(replyMessages)
+          };
+        }
+
+        if (command.name === "session-new") {
+          const created = await agentService.createSession({
+            title: command.title || `SMS ${event.from} -> ${event.to}`,
+            channel: `sms:${providerName}`
+          });
+          await unbindConversationKeyFromOtherSessions(
+            sessionStore,
+            conversationKey,
+            created.id
+          );
+          const replyText = `Started new session: ${created.id}`;
+          const now = new Date().toISOString();
+          await mergeSmsBinding(sessionStore, created.id, {
+            provider: provider.provider,
+            conversationKey,
+            accountId: event.accountId || "",
+            from: event.from,
+            to: event.to,
+            lastInboundMessageId: event.messageId || "",
+            lastInboundAt: now,
+            lastInboundText: truncateText(event.text, 500),
+            lastReplyAt: now,
+            lastReplyText: truncateText(replyText, 5000)
+          });
+          const replyMessages = splitTextForSmsMessages(
+            normalizeSmsText(replyText),
+            smsConfig.maxReplyChars
+          );
+          return {
+            ok: true,
+            status: 200,
+            sessionId: created.id,
+            conversationKey,
+            createdSession: true,
+            response: buildReplyPayload(replyMessages)
+          };
+        }
+      }
+
       const session = await ensureSession({ conversationKey, event });
       const systemPrompt = buildSmsSystemPrompt({
         defaultPrompt: smsConfig.defaultSystemPrompt,

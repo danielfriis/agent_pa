@@ -1,6 +1,10 @@
 import readline from "node:readline";
 
 import { parseRememberCommand } from "./remember-command.js";
+import {
+  parseSharedChatCommand,
+  sharedChatCommandHelpLines
+} from "./shared-chat-commands.js";
 
 const parseChatModel = (raw) => {
   if (!raw || typeof raw !== "string") return null;
@@ -63,18 +67,51 @@ export const startTerminalChat = async ({
       return;
     }
 
-    if (input === "/help") {
-      process.stdout.write(
-        "/new [title]  start a new session\n/model PROVIDER/MODEL  set per-chat model override\n/session  show current session id\n/workspace  show workspace paths\n/memory  show current memory file\n/remember TEXT  append to persistent memory\n/skills  list local skills\n/skill-new NAME  create a skill markdown file\n/exit  stop chat and server\n"
-      );
-      prompt();
-      return;
-    }
+    const sharedCommand = parseSharedChatCommand(input);
+    if (sharedCommand.isCommand) {
+      if (sharedCommand.name === "help") {
+        process.stdout.write(
+          `${[
+            ...sharedChatCommandHelpLines(),
+            "/model PROVIDER/MODEL  set per-chat model override",
+            "/workspace  show workspace paths",
+            "/memory  show current memory file",
+            "/remember TEXT  append to persistent memory",
+            "/skills  list local skills",
+            "/skill-new NAME  create a skill markdown file",
+            "/exit  stop chat and server"
+          ].join("\n")}\n`
+        );
+        prompt();
+        return;
+      }
 
-    if (input === "/session") {
-      process.stdout.write(`[chat] ${session.id}\n`);
-      prompt();
-      return;
+      if (sharedCommand.name === "session") {
+        process.stdout.write(`[chat] ${session.id}\n`);
+        prompt();
+        return;
+      }
+
+      if (sharedCommand.name === "session-new") {
+        const title = sharedCommand.title || `Terminal chat ${new Date().toISOString()}`;
+        busy = true;
+        void (async () => {
+          try {
+            session = await agentService.createSession({ title, channel: "terminal" });
+            process.stdout.write(`[chat] New session: ${session.id}\n`);
+          } catch (error) {
+            process.stdout.write(
+              `[chat] Failed to create session: ${
+                error instanceof Error ? error.message : String(error)
+              }\n`
+            );
+          } finally {
+            busy = false;
+            prompt();
+          }
+        })();
+        return;
+      }
     }
 
     if (input === "/workspace") {
@@ -153,25 +190,6 @@ export const startTerminalChat = async ({
           );
         } catch (error) {
           process.stdout.write(`[chat] Failed to create skill: ${error instanceof Error ? error.message : String(error)}\n`);
-        } finally {
-          busy = false;
-          prompt();
-        }
-      })();
-      return;
-    }
-
-    if (input.startsWith("/new")) {
-      const title = input.replace("/new", "").trim() || `Terminal chat ${new Date().toISOString()}`;
-      busy = true;
-      void (async () => {
-        try {
-          session = await agentService.createSession({ title, channel: "terminal" });
-          process.stdout.write(`[chat] New session: ${session.id}\n`);
-        } catch (error) {
-          process.stdout.write(
-            `[chat] Failed to create session: ${error instanceof Error ? error.message : String(error)}\n`
-          );
         } finally {
           busy = false;
           prompt();
