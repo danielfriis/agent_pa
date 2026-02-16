@@ -19,6 +19,7 @@ It automatically:
 4. Writes `.env` with remote-safe defaults and auth enabled.
 5. Creates and starts `systemd` service `agent-pa`.
 6. Writes and reloads Nginx proxy config.
+7. Disables the default Nginx site symlink to avoid route conflicts.
 
 ## Non-interactive mode
 
@@ -53,7 +54,8 @@ What this does:
 2. Reinstalls production dependencies (`npm ci --omit=dev`).
 3. Runs `npm run check:syntax`.
 4. Restarts `agent-pa` with systemd.
-5. Verifies `/health` on localhost.
+5. Refreshes Nginx site symlinks (`agent-pa.conf` enabled, default site disabled).
+6. Verifies `/health` on localhost.
 
 Useful options:
 
@@ -76,6 +78,33 @@ Routing note:
 - `https://` is not enabled by default; configure TLS first.
 
 The script prints the generated `APP_API_TOKEN` at the end.
+
+## SMS webhook routing check
+
+If Twilio reports an Nginx `404` page while localhost works:
+
+1. Verify app route is reachable directly:
+
+```bash
+curl -i -X POST http://127.0.0.1:8787/channels/sms/inbound \
+  -d 'From=%2B15550001111&To=%2B15559998888&Body=test'
+```
+
+Expected with signature validation enabled: `403` with JSON error about missing signature.
+
+2. Verify Nginx forwards to app:
+
+```bash
+curl -i -X POST http://127.0.0.1/channels/sms/inbound \
+  -d 'From=%2B15550001111&To=%2B15559998888&Body=test'
+```
+
+If this returns Nginx HTML `404`, check enabled site symlinks and reload:
+
+```bash
+sudo ls -l /etc/nginx/sites-enabled
+sudo nginx -t && sudo systemctl reload nginx
+```
 
 ## TLS (recommended)
 

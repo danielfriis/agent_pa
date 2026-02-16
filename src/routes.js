@@ -6,6 +6,13 @@ import { createSessionRouteHandler } from "./session-routes.js";
 import { createSmsRouteHandler } from "./sms-routes.js";
 import { createStateRouteHandler } from "./state-routes.js";
 
+const normalizeRoutePath = (value) => {
+  const raw = String(value || "/").trim();
+  const withLeadingSlash = raw.startsWith("/") ? raw : `/${raw}`;
+  if (withLeadingSlash === "/") return "/";
+  return withLeadingSlash.replace(/\/+$/, "") || "/";
+};
+
 export const createRouteHandler = ({
   opencodeClient,
   workspace,
@@ -35,8 +42,12 @@ export const createRouteHandler = ({
     const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
     const path = url.pathname;
     const isHealthRoute = req.method === "GET" && path === "/health";
+    const configuredSmsInboundPath =
+      smsChannelService?.isEnabled() ? normalizeRoutePath(smsChannelService.inboundPath()) : null;
     const isSmsInboundRoute =
-      req.method === "POST" && smsChannelService?.isEnabled() && path === smsChannelService.inboundPath();
+      req.method === "POST" &&
+      configuredSmsInboundPath &&
+      normalizeRoutePath(path) === configuredSmsInboundPath;
     const requiresAuth =
       config.security?.requireAuth &&
       (!isHealthRoute || !config.security.allowUnauthenticatedHealth) &&

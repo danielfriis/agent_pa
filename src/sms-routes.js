@@ -1,5 +1,12 @@
 import { readFormBody, sendJson, sendRaw } from "./http-utils.js";
 
+const normalizeRoutePath = (value) => {
+  const raw = String(value || "/").trim();
+  const withLeadingSlash = raw.startsWith("/") ? raw : `/${raw}`;
+  if (withLeadingSlash === "/") return "/";
+  return withLeadingSlash.replace(/\/+$/, "") || "/";
+};
+
 export const createSmsRouteHandler = ({ smsChannelService }) => async (
   req,
   res,
@@ -8,8 +15,8 @@ export const createSmsRouteHandler = ({ smsChannelService }) => async (
 ) => {
   if (!smsChannelService?.isEnabled()) return false;
 
-  const inboundPath = smsChannelService.inboundPath();
-  if (path !== inboundPath) return false;
+  const inboundPath = normalizeRoutePath(smsChannelService.inboundPath());
+  if (normalizeRoutePath(path) !== inboundPath) return false;
 
   if (req.method !== "POST") {
     sendJson(

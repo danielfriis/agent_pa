@@ -178,6 +178,8 @@ SMS_MAX_REPLY_CHARS=320
 SMS_TWILIO_AUTH_TOKEN=your_twilio_auth_token
 SMS_TWILIO_VALIDATE_SIGNATURE=true
 SMS_TWILIO_WEBHOOK_BASE_URL=https://your-public-host.example
+# For IP-based HTTP deployments, use:
+# SMS_TWILIO_WEBHOOK_BASE_URL=http://<server-ip>
 ```
 
 2. Start the server:
@@ -191,6 +193,7 @@ npm run start:server
    - Under **Messaging**, set **A MESSAGE COMES IN** webhook to:
      `https://your-public-host.example/channels/sms/inbound`
    - Method: `POST`.
+   - Keep it canonical without a trailing slash (`/channels/sms/inbound`).
 
 4. Optional multi-account/BYO Twilio setup (for multiple account SIDs):
 
@@ -205,6 +208,9 @@ SMS_TWILIO_AUTH_TOKENS_JSON={"ACxxxxxxxx":"token1","ACyyyyyyyy":"token2"}
 ```bash
 SMS_TWILIO_ALLOWED_TO_NUMBERS=+15551234567,+15557654321
 ```
+
+Troubleshooting:
+- If `POST http://127.0.0.1:8787/channels/sms/inbound` returns JSON `403` but public URL returns Nginx HTML `404`, Nginx site routing is misconfigured. See `/Users/danielfriis/Code/agent_pa/docs/remote-server-install.md`.
 
 ## Remote deployment
 
@@ -234,6 +240,8 @@ Or via npm:
 ```bash
 npm run deploy:update:server
 ```
+
+The update script also refreshes Nginx site symlinks so `agent-pa.conf` stays enabled and the default site is disabled.
 
 Included templates:
 - `/Users/danielfriis/Code/agent_pa/deploy/systemd/agent-pa.service.example`

@@ -10,6 +10,13 @@ const int = (value, fallback) => {
   return Number.isNaN(parsed) ? fallback : parsed;
 };
 
+const normalizeRoutePath = (value, fallback = "/") => {
+  const raw = String(value || fallback).trim();
+  const withLeadingSlash = raw.startsWith("/") ? raw : `/${raw}`;
+  if (withLeadingSlash === "/") return "/";
+  return withLeadingSlash.replace(/\/+$/, "") || "/";
+};
+
 const csv = (value) =>
   String(value || "")
     .split(",")
@@ -98,7 +105,10 @@ export const config = {
     sms: {
       enabled: bool(process.env.SMS_ENABLED, false),
       provider: (process.env.SMS_PROVIDER || "twilio").toLowerCase(),
-      inboundPath: process.env.SMS_INBOUND_PATH || "/channels/sms/inbound",
+      inboundPath: normalizeRoutePath(
+        process.env.SMS_INBOUND_PATH,
+        "/channels/sms/inbound"
+      ),
       allowUnauthenticatedInbound: bool(process.env.SMS_ALLOW_UNAUTHENTICATED_INBOUND, true),
       maxReplyChars: int(process.env.SMS_MAX_REPLY_CHARS, 320),
       defaultSystemPrompt:

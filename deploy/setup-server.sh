@@ -13,6 +13,7 @@ ENV_FILE="${REPO_DIR}/.env"
 SYSTEMD_UNIT_PATH="/etc/systemd/system/${SERVICE_NAME}.service"
 NGINX_SITE_PATH="/etc/nginx/sites-available/${APP_NAME}.conf"
 NGINX_ENABLED_PATH="/etc/nginx/sites-enabled/${APP_NAME}.conf"
+NGINX_DEFAULT_ENABLED_PATH="/etc/nginx/sites-enabled/default"
 
 OPENAI_API_KEY_INPUT="${OPENAI_API_KEY:-}"
 APP_API_TOKEN_INPUT="${APP_API_TOKEN:-}"
@@ -231,6 +232,7 @@ server {
 EOF
 
   sudo ln -sfn "${NGINX_SITE_PATH}" "${NGINX_ENABLED_PATH}"
+  sudo rm -f "${NGINX_DEFAULT_ENABLED_PATH}"
 }
 
 enable_services() {

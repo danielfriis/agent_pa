@@ -6,10 +6,14 @@ REMOTE_NAME="${REMOTE_NAME:-origin}"
 BRANCH_INPUT=""
 SKIP_DEPS="false"
 SKIP_CHECK="false"
+APP_NAME="${APP_NAME:-agent-pa}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 ENV_FILE="${REPO_DIR}/.env"
+NGINX_SITE_PATH="/etc/nginx/sites-available/${APP_NAME}.conf"
+NGINX_ENABLED_PATH="/etc/nginx/sites-enabled/${APP_NAME}.conf"
+NGINX_DEFAULT_ENABLED_PATH="/etc/nginx/sites-enabled/default"
 
 usage() {
   cat <<'EOF'
@@ -150,6 +154,24 @@ restart_service() {
   sudo systemctl --no-pager --lines=12 status "${SERVICE_NAME}"
 }
 
+refresh_nginx() {
+  if ! command -v nginx >/dev/null 2>&1; then
+    log "Skipping Nginx refresh (nginx command not found)"
+    return
+  fi
+
+  if [[ ! -f "${NGINX_SITE_PATH}" ]]; then
+    log "Skipping Nginx refresh (${NGINX_SITE_PATH} not found)"
+    return
+  fi
+
+  log "Refreshing Nginx site symlinks"
+  sudo ln -sfn "${NGINX_SITE_PATH}" "${NGINX_ENABLED_PATH}"
+  sudo rm -f "${NGINX_DEFAULT_ENABLED_PATH}"
+  sudo nginx -t
+  sudo systemctl reload nginx
+}
+
 health_check() {
   if ! command -v curl >/dev/null 2>&1; then
     log "Skipping health check (curl not installed)"
@@ -196,6 +218,7 @@ main() {
   install_dependencies
   run_checks
   restart_service
+  refresh_nginx
   health_check
 
   log "Update complete."

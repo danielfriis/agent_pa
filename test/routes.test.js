@@ -330,6 +330,33 @@ test("POST /channels/sms/inbound delegates form payload to sms channel service",
   assert.equal(calls.smsInbound[0].form.Body, "hello");
 });
 
+test("POST /channels/sms/inbound/ also matches SMS route", async () => {
+  const { route, calls } = buildRoute({
+    config: {
+      channels: {
+        sms: {
+          enabled: true,
+          inboundPath: "/channels/sms/inbound",
+          allowUnauthenticatedInbound: true
+        }
+      }
+    }
+  });
+
+  const response = await invoke(route, {
+    method: "POST",
+    url: "/channels/sms/inbound/",
+    rawBody: "From=%2B15550001111&To=%2B15559998888&Body=hello",
+    headers: {
+      "content-type": "application/x-www-form-urlencoded"
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(calls.smsInbound.length, 1);
+  assert.equal(calls.smsInbound[0].path, "/channels/sms/inbound/");
+});
+
 test("POST /channels/sms/inbound bypasses app token auth when configured", async () => {
   const { route, calls } = buildRoute({
     config: {
