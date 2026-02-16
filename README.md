@@ -46,7 +46,7 @@ Core concepts in this project are workspace, skills, tools, memory, channels, an
 ### Tools
 
 - Purpose: explicit side-effect interfaces callable by the agent.
-- Storage: `agent_config/tools/` (including managed defaults like `add_memory.js`).
+- Storage: `agent_config/tools/` (including managed defaults like `add_memory.js` and runtime tools such as `fetch_webpage.js` for blocked-site fallback fetches).
 - Runtime sync target: `OPENCODE_DIRECTORY/.opencode/tools/`.
 - Contract:
   - Success shape: `{ ok: true, ... }`
@@ -140,6 +140,7 @@ API auth defaults to off. If `APP_API_TOKEN` is set, auth is enabled automatical
 `GET /health` remains public by default; set `APP_ALLOW_UNAUTHENTICATED_HEALTH=false` to protect it.
 When SMS is enabled, `/channels/sms/inbound` can be kept public with
 `SMS_ALLOW_UNAUTHENTICATED_INBOUND=true` and protected with provider signature verification.
+`SMS_INCLUDE_SEQUENCE_LABELS=true` (default) prefixes multipart SMS replies with sequence markers.
 
 Start modes:
 - `npm run start:server` starts only the HTTP server so channel clients can connect.
@@ -189,6 +190,8 @@ SMS_INBOUND_PATH=/channels/sms/inbound
 SMS_ALLOW_UNAUTHENTICATED_INBOUND=true
 # Max chars per outbound SMS message. Longer assistant replies are split across multiple messages.
 SMS_MAX_REPLY_CHARS=320
+# Prefix multipart SMS chunks with [1/N], [2/N], ... so ordering stays clear.
+SMS_INCLUDE_SEQUENCE_LABELS=true
 # Optional override. Keep the "tools and skills remain available" guidance unless intentionally changing behavior.
 # SMS_DEFAULT_SYSTEM_PROMPT=You are replying to a user over SMS. Access to all tools and skills remains available; SMS only changes response formatting. Respond with plain text only and keep it concise.
 # Optional canned reply for sender numbers that are not allowed.

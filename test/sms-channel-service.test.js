@@ -34,6 +34,7 @@ const createSmsConfig = (overrides = {}) => ({
       inboundPath: "/channels/sms/inbound",
       allowUnauthenticatedInbound: true,
       maxReplyChars: 320,
+      includeSequenceLabels: true,
       defaultSystemPrompt: "Reply as SMS.",
       unauthorizedReply: "This phone number is not authorized to use this SMS channel.",
       fallbackReply: "Fallback.",
@@ -73,6 +74,7 @@ const extractTwilioMessages = (xml) =>
   );
 
 const normalizeWhitespace = (value) => String(value || "").replace(/\s+/g, " ").trim();
+const stripSequenceLabel = (value) => String(value || "").replace(/^\[\d+\/\d+\]\s*/, "");
 
 test("sms channel creates a session then reuses it for same provider/account/to/from tuple", async () => {
   const createdSessions = [];
@@ -331,8 +333,10 @@ test("sms channel splits long assistant replies into multiple Twilio messages", 
   assert.ok(messages.length > 1);
   for (const message of messages) {
     assert.ok(message.length <= maxReplyChars);
+    assert.match(message, /^\[\d+\/\d+\]\s/);
   }
-  assert.equal(normalizeWhitespace(messages.join(" ")), normalizeWhitespace(longReply));
+  const textWithoutLabels = messages.map(stripSequenceLabel).join(" ");
+  assert.equal(normalizeWhitespace(textWithoutLabels), normalizeWhitespace(longReply));
 });
 
 test("sms channel normalizes markdown-heavy assistant replies for plain SMS text", async () => {
@@ -371,4 +375,46 @@ test("sms channel normalizes markdown-heavy assistant replies for plain SMS text
   assert.ok(!combined.includes("→"));
   assert.match(combined, /Scandinavian Photo \(https:\/\/example\.com\/shop\)/);
   assert.match(combined, /one specific strap -> right now\./);
+});
+
+test("sms channel serializes concurrent inbound requests for the same conversation", async () => {
+  const sentMessages = [];
+  const sessionStore = createMockSessionStore();
+  let inFlight = 0;
+  let maxInFlight = 0;
+  const agentService = {
+    createSession: async () => ({ id: "ses_1" }),
+    sendUserMessage: async (args) => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      sentMessages.push(args.text);
+      await new Promise((resolve) => setTimeout(resolve, args.text === "first" ? 40 : 0));
+      inFlight -= 1;
+      return { assistantText: `ack: ${args.text}` };
+    }
+  };
+  const service = createSmsChannelService({
+    agentService,
+    sessionStore,
+    config: createSmsConfig()
+  });
+
+  const first = service.handleInboundWebhook({
+    headers: {},
+    form: twilioForm({ Body: "first", MessageSid: "SM-first" }),
+    path: "/channels/sms/inbound",
+    queryString: ""
+  });
+  const second = service.handleInboundWebhook({
+    headers: {},
+    form: twilioForm({ Body: "second", MessageSid: "SM-second" }),
+    path: "/channels/sms/inbound",
+    queryString: ""
+  });
+  const [firstResult, secondResult] = await Promise.all([first, second]);
+
+  assert.equal(firstResult.ok, true);
+  assert.equal(secondResult.ok, true);
+  assert.deepEqual(sentMessages, ["first", "second"]);
+  assert.equal(maxInFlight, 1);
 });

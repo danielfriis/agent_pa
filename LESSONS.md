@@ -35,3 +35,8 @@ Use this file to log incorrect assumptions made by the coding agent.
 - Incorrect assumption: Node tests could bind a local HTTP server in this execution sandbox.
 - What was actually true: The test environment denied `listen(127.0.0.1)` with `EPERM`, so socket-based tests failed regardless of code correctness.
 - Adjustment to prevent recurrence: Prefer mocking `fetch` directly for HTTP client behavior tests in constrained environments, and avoid listener-based tests unless socket permissions are confirmed.
+
+- Date: 2026-02-16
+- Incorrect assumption: `opencode debug config` would run reliably inside this sandboxed environment for local introspection.
+- What was actually true: The command failed with `EPERM` while initializing OpenCode logging in the sandbox, so it was not a dependable way to inspect runtime settings here.
+- Adjustment to prevent recurrence: Use project config files (`opencode.json`, `.env`, synced tool files) as the primary inspection source in sandboxed runs, and only use OpenCode debug commands when unrestricted execution is available.

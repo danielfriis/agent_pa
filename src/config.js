@@ -121,6 +121,7 @@ export const config = {
       ),
       allowUnauthenticatedInbound: bool(process.env.SMS_ALLOW_UNAUTHENTICATED_INBOUND, true),
       maxReplyChars: int(process.env.SMS_MAX_REPLY_CHARS, 320),
+      includeSequenceLabels: bool(process.env.SMS_INCLUDE_SEQUENCE_LABELS, true),
       defaultSystemPrompt:
         process.env.SMS_DEFAULT_SYSTEM_PROMPT ||
         "You are replying to a user over SMS. Access to all tools and skills remains available; SMS only changes response formatting. Respond with plain text only and keep it concise.",

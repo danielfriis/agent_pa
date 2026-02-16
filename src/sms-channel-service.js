@@ -118,6 +118,54 @@ const splitTextForSmsMessages = (value, maxChars) => {
   return messages.length ? messages : [text.slice(0, maxChars)];
 };
 
+const MIN_CHARS_FOR_SEQUENCE_BODY = 8;
+const MAX_SEQUENCE_RETRY_PASSES = 4;
+
+const withSmsSequenceLabels = (value, maxChars) => {
+  const text = trimToString(value);
+  if (!text) return [];
+
+  let segments = splitTextForSmsMessages(text, maxChars);
+  if (segments.length <= 1 || !maxChars || maxChars < 1) return segments;
+
+  for (let pass = 0; pass < MAX_SEQUENCE_RETRY_PASSES; pass += 1) {
+    const total = segments.length;
+    const width = String(total).length;
+    const formatCount = (count) => String(count).padStart(width, "0");
+    const prefix = `[${formatCount(total)}/${formatCount(total)}] `;
+    const bodyMaxChars = maxChars - prefix.length;
+    if (bodyMaxChars < MIN_CHARS_FOR_SEQUENCE_BODY) return segments;
+
+    const next = splitTextForSmsMessages(text, bodyMaxChars);
+    if (next.length === total) {
+      return next.map(
+        (segment, index) => `[${formatCount(index + 1)}/${formatCount(total)}] ${segment}`
+      );
+    }
+    segments = next;
+  }
+
+  const total = segments.length;
+  const width = String(total).length;
+  const formatCount = (count) => String(count).padStart(width, "0");
+  return segments.map((segment, index) => {
+    const prefix = `[${formatCount(index + 1)}/${formatCount(total)}] `;
+    const bodyMaxChars = Math.max(1, maxChars - prefix.length);
+    return `${prefix}${truncateText(segment, bodyMaxChars)}`;
+  });
+};
+
+const formatSmsReplyMessages = (value, { maxChars, includeSequenceLabels }) => {
+  const normalized = normalizeSmsText(value);
+  if (!normalized) return [];
+
+  if (!includeSequenceLabels) {
+    return splitTextForSmsMessages(normalized, maxChars);
+  }
+
+  return withSmsSequenceLabels(normalized, maxChars);
+};
+
 const mergeSmsBinding = async (sessionStore, sessionId, patch) => {
   const current = (await sessionStore.getSession(sessionId)) || { id: sessionId };
   const currentBindings = current.channelBindings || {};
@@ -163,6 +211,7 @@ const buildSmsSystemPrompt = ({ defaultPrompt, event, maxReplyChars }) =>
     `- To: ${event.to}`,
     `- Account ID: ${event.accountId || "unknown"}`,
     "- You still have access to all tools and skills available in this runtime. SMS only changes response formatting.",
+    "- If a site returns JS-required, 403, or empty content, call the fetch_webpage tool before reporting access limitations.",
     `- Reply with plain text only. If needed, split across multiple SMS messages and keep each message under ${maxReplyChars} characters.`
   ]
     .filter(Boolean)
@@ -177,6 +226,21 @@ export const createSmsChannelService = ({ agentService, sessionStore, config }) 
   ]);
 
   const provider = providers.get(providerName);
+  const conversationQueueTailByKey = new Map();
+
+  const enqueueConversationWork = async (conversationKey, run) => {
+    const prior = conversationQueueTailByKey.get(conversationKey) || Promise.resolve();
+    const started = prior
+      .catch(() => {})
+      .then(run);
+    const tail = started.finally(() => {
+      if (conversationQueueTailByKey.get(conversationKey) === tail) {
+        conversationQueueTailByKey.delete(conversationKey);
+      }
+    });
+    conversationQueueTailByKey.set(conversationKey, tail);
+    return started;
+  };
 
   const findSessionForConversation = async (conversationKey) => {
     const sessions = await sessionStore.listSessions();
@@ -201,15 +265,17 @@ export const createSmsChannelService = ({ agentService, sessionStore, config }) 
     body: provider.formatReply(messages)
   });
 
-  const fallbackReplyMessages = splitTextForSmsMessages(
-    normalizeSmsText(smsConfig.fallbackReply || "I hit an error processing that. Please try again shortly."),
-    smsConfig.maxReplyChars
+  const toReplyMessages = (text) =>
+    formatSmsReplyMessages(text, {
+      maxChars: smsConfig.maxReplyChars,
+      includeSequenceLabels: smsConfig.includeSequenceLabels !== false
+    });
+
+  const fallbackReplyMessages = toReplyMessages(
+    smsConfig.fallbackReply || "I hit an error processing that. Please try again shortly."
   );
-  const unauthorizedReplyMessages = splitTextForSmsMessages(
-    normalizeSmsText(
-      smsConfig.unauthorizedReply || "This phone number is not authorized to use this SMS channel."
-    ),
-    smsConfig.maxReplyChars
+  const unauthorizedReplyMessages = toReplyMessages(
+    smsConfig.unauthorizedReply || "This phone number is not authorized to use this SMS channel."
   );
 
   const handleInboundWebhook = async ({ headers, form, path, queryString }) => {
@@ -271,137 +337,125 @@ export const createSmsChannelService = ({ agentService, sessionStore, config }) 
       from: event.from
     });
 
-    try {
-      const command = parseSharedChatCommand(event.text);
-      if (command.isCommand) {
-        if (command.name === "help") {
-          const replyMessages = splitTextForSmsMessages(
-            normalizeSmsText(sharedChatCommandHelpText()),
-            smsConfig.maxReplyChars
-          );
-          return {
-            ok: true,
-            status: 200,
-            sessionId: null,
-            conversationKey,
-            createdSession: false,
-            response: buildReplyPayload(replyMessages)
-          };
+    return enqueueConversationWork(conversationKey, async () => {
+      try {
+        const command = parseSharedChatCommand(event.text);
+        if (command.isCommand) {
+          if (command.name === "help") {
+            const replyMessages = toReplyMessages(sharedChatCommandHelpText());
+            return {
+              ok: true,
+              status: 200,
+              sessionId: null,
+              conversationKey,
+              createdSession: false,
+              response: buildReplyPayload(replyMessages)
+            };
+          }
+
+          if (command.name === "session") {
+            const existing = await findSessionForConversation(conversationKey);
+            const sessionText = existing?.id
+              ? `Current session: ${existing.id}`
+              : "No active session. Use /session-new [title] to start one.";
+            const replyMessages = toReplyMessages(sessionText);
+            return {
+              ok: true,
+              status: 200,
+              sessionId: existing?.id || null,
+              conversationKey,
+              createdSession: false,
+              response: buildReplyPayload(replyMessages)
+            };
+          }
+
+          if (command.name === "session-new") {
+            const created = await agentService.createSession({
+              title: command.title || `SMS ${event.from} -> ${event.to}`,
+              channel: `sms:${providerName}`
+            });
+            await unbindConversationKeyFromOtherSessions(
+              sessionStore,
+              conversationKey,
+              created.id
+            );
+            const replyText = `Started new session: ${created.id}`;
+            const now = new Date().toISOString();
+            await mergeSmsBinding(sessionStore, created.id, {
+              provider: provider.provider,
+              conversationKey,
+              accountId: event.accountId || "",
+              from: event.from,
+              to: event.to,
+              lastInboundMessageId: event.messageId || "",
+              lastInboundAt: now,
+              lastInboundText: truncateText(event.text, 500),
+              lastReplyAt: now,
+              lastReplyText: truncateText(replyText, 5000)
+            });
+            const replyMessages = toReplyMessages(replyText);
+            return {
+              ok: true,
+              status: 200,
+              sessionId: created.id,
+              conversationKey,
+              createdSession: true,
+              response: buildReplyPayload(replyMessages)
+            };
+          }
         }
 
-        if (command.name === "session") {
-          const existing = await findSessionForConversation(conversationKey);
-          const sessionText = existing?.id
-            ? `Current session: ${existing.id}`
-            : "No active session. Use /session-new [title] to start one.";
-          const replyMessages = splitTextForSmsMessages(
-            normalizeSmsText(sessionText),
-            smsConfig.maxReplyChars
-          );
-          return {
-            ok: true,
-            status: 200,
-            sessionId: existing?.id || null,
-            conversationKey,
-            createdSession: false,
-            response: buildReplyPayload(replyMessages)
-          };
-        }
+        const session = await ensureSession({ conversationKey, event });
+        const systemPrompt = buildSmsSystemPrompt({
+          defaultPrompt: smsConfig.defaultSystemPrompt,
+          event,
+          maxReplyChars: smsConfig.maxReplyChars
+        });
+        const reply = await agentService.sendUserMessage({
+          sessionId: session.id,
+          text: event.text,
+          system: systemPrompt,
+          channel: `sms:${providerName}`
+        });
+        const assistantReplyMessages = toReplyMessages(
+          reply.assistantText || fallbackReplyMessages.join("\n")
+        );
+        const assistantText = truncateText(assistantReplyMessages.join("\n"), 5000);
+        const now = new Date().toISOString();
+        await mergeSmsBinding(sessionStore, session.id, {
+          provider: provider.provider,
+          conversationKey,
+          accountId: event.accountId || "",
+          from: event.from,
+          to: event.to,
+          lastInboundMessageId: event.messageId || "",
+          lastInboundAt: now,
+          lastInboundText: truncateText(event.text, 500),
+          lastReplyAt: now,
+          lastReplyText: assistantText
+        });
 
-        if (command.name === "session-new") {
-          const created = await agentService.createSession({
-            title: command.title || `SMS ${event.from} -> ${event.to}`,
-            channel: `sms:${providerName}`
-          });
-          await unbindConversationKeyFromOtherSessions(
-            sessionStore,
-            conversationKey,
-            created.id
-          );
-          const replyText = `Started new session: ${created.id}`;
-          const now = new Date().toISOString();
-          await mergeSmsBinding(sessionStore, created.id, {
-            provider: provider.provider,
-            conversationKey,
-            accountId: event.accountId || "",
-            from: event.from,
-            to: event.to,
-            lastInboundMessageId: event.messageId || "",
-            lastInboundAt: now,
-            lastInboundText: truncateText(event.text, 500),
-            lastReplyAt: now,
-            lastReplyText: truncateText(replyText, 5000)
-          });
-          const replyMessages = splitTextForSmsMessages(
-            normalizeSmsText(replyText),
-            smsConfig.maxReplyChars
-          );
-          return {
-            ok: true,
-            status: 200,
-            sessionId: created.id,
-            conversationKey,
-            createdSession: true,
-            response: buildReplyPayload(replyMessages)
-          };
-        }
+        return {
+          ok: true,
+          status: 200,
+          sessionId: session.id,
+          conversationKey,
+          createdSession: session.created,
+          response: buildReplyPayload(assistantReplyMessages)
+        };
+      } catch (error) {
+        const detail = error instanceof Error ? error.stack || error.message : String(error);
+        process.stderr.write(`[agent-pa] sms inbound failed: ${detail}\n`);
+        return {
+          ok: true,
+          status: 200,
+          sessionId: null,
+          conversationKey,
+          createdSession: false,
+          response: buildReplyPayload(fallbackReplyMessages)
+        };
       }
-
-      const session = await ensureSession({ conversationKey, event });
-      const systemPrompt = buildSmsSystemPrompt({
-        defaultPrompt: smsConfig.defaultSystemPrompt,
-        event,
-        maxReplyChars: smsConfig.maxReplyChars
-      });
-      const reply = await agentService.sendUserMessage({
-        sessionId: session.id,
-        text: event.text,
-        system: systemPrompt,
-        channel: `sms:${providerName}`
-      });
-      const assistantReplyText = normalizeSmsText(
-        reply.assistantText || fallbackReplyMessages.join("\n")
-      );
-
-      const assistantReplyMessages = splitTextForSmsMessages(
-        assistantReplyText || fallbackReplyMessages.join("\n"),
-        smsConfig.maxReplyChars
-      );
-      const assistantText = truncateText(assistantReplyMessages.join("\n"), 5000);
-      const now = new Date().toISOString();
-      await mergeSmsBinding(sessionStore, session.id, {
-        provider: provider.provider,
-        conversationKey,
-        accountId: event.accountId || "",
-        from: event.from,
-        to: event.to,
-        lastInboundMessageId: event.messageId || "",
-        lastInboundAt: now,
-        lastInboundText: truncateText(event.text, 500),
-        lastReplyAt: now,
-        lastReplyText: assistantText
-      });
-
-      return {
-        ok: true,
-        status: 200,
-        sessionId: session.id,
-        conversationKey,
-        createdSession: session.created,
-        response: buildReplyPayload(assistantReplyMessages)
-      };
-    } catch (error) {
-      const detail = error instanceof Error ? error.stack || error.message : String(error);
-      process.stderr.write(`[agent-pa] sms inbound failed: ${detail}\n`);
-      return {
-        ok: true,
-        status: 200,
-        sessionId: null,
-        conversationKey,
-        createdSession: false,
-        response: buildReplyPayload(fallbackReplyMessages)
-      };
-    }
+    });
   };
 
   return {
