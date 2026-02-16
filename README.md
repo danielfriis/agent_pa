@@ -125,6 +125,8 @@ Default app URL: `http://127.0.0.1:8787`
 
 By default this app assumes OpenCode server at `http://127.0.0.1:4096`.
 `AUTOSTART_OPENCODE` defaults to `true`, so `npm start` will launch OpenCode automatically unless you set it to `false`.
+`OPENCODE_ENABLE_EXA` defaults to `true` in `.env.example` and enables OpenCode-hosted web search when using non-OpenCode model providers.
+`OPENCODE_REQUEST_TIMEOUT_MS` defaults to `0` (no timeout) to allow long-running upstream tasks; set a positive value (for example `180000`) to fail stalled requests fast.
 For real model responses, set `OPENAI_API_KEY` in `.env`.
 OpenCode directory defaults to `agent_workspace/` and can be overridden with `OPENCODE_DIRECTORY`.
 Session metadata files default to `agent_config/sessions/` and can be overridden with `STORE_DIR`.
@@ -160,6 +162,7 @@ Commands:
 Memory is automatically injected as system context from `agent_config/memory/memory.md` for each prompt.
 All markdown files in `agent_config/system/` are loaded in filename order and prepended to each prompt. `POST /state/system` writes to `agent_config/system/system-prompt.md`.
 Runtime OpenCode extensions and copied skills/tools live under `OPENCODE_DIRECTORY/.opencode/`.
+Project-level OpenCode permissions live in `opencode.json` (this repo explicitly allows `websearch`).
 
 ## Twilio SMS Setup
 

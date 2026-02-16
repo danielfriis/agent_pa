@@ -17,8 +17,11 @@ It automatically:
 2. Installs app dependencies (`npm ci --omit=dev`).
 3. Generates a random API auth token.
 4. Writes `.env` with remote-safe defaults and auth enabled.
+   - Includes `OPENCODE_ENABLE_EXA=true` so OpenCode web search is enabled with non-OpenCode providers.
+   - Sets `OPENCODE_REQUEST_TIMEOUT_MS=0` so long-running tasks are not cut off by app-level timeouts.
 5. Creates and starts `systemd` service `agent-pa`.
 6. Writes and reloads Nginx proxy config.
+   - Includes long proxy timeouts (`proxy_read_timeout`/`proxy_send_timeout` set to 86400s).
 7. Disables the default Nginx site symlink to avoid route conflicts.
 
 ## Non-interactive mode

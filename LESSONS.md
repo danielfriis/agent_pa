@@ -30,3 +30,8 @@ Use this file to log incorrect assumptions made by the coding agent.
 - Incorrect assumption: Post-deploy SMS fallback replies were primarily due to transient OpenCode startup timing.
 - What was actually true: A malformed JSON file in the local session store caused `SessionStore.listSessions()` to throw, which triggered the SMS fallback path.
 - Adjustment to prevent recurrence: Treat persistent fallback replies as a data-integrity signal first; log the caught exception and harden file-backed stores to quarantine invalid records instead of failing request handling.
+
+- Date: 2026-02-16
+- Incorrect assumption: Node tests could bind a local HTTP server in this execution sandbox.
+- What was actually true: The test environment denied `listen(127.0.0.1)` with `EPERM`, so socket-based tests failed regardless of code correctness.
+- Adjustment to prevent recurrence: Prefer mocking `fetch` directly for HTTP client behavior tests in constrained environments, and avoid listener-based tests unless socket permissions are confirmed.

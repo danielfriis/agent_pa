@@ -99,7 +99,8 @@ export const config = {
     directory: resolveDir(process.env.OPENCODE_DIRECTORY, agentWorkspaceDir),
     username: process.env.OPENCODE_SERVER_USERNAME || "opencode",
     password: process.env.OPENCODE_SERVER_PASSWORD || "",
-    autostart: bool(process.env.AUTOSTART_OPENCODE, true)
+    autostart: bool(process.env.AUTOSTART_OPENCODE, true),
+    requestTimeoutMs: int(process.env.OPENCODE_REQUEST_TIMEOUT_MS, 0)
   },
   channels: {
     sms: {

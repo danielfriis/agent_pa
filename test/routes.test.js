@@ -250,6 +250,45 @@ test("POST /sessions/:id/message delegates message handling to agentService", as
   assert.equal(response.json.assistant.text, "world");
 });
 
+test("POST /sessions/:id/message prefers fallback text when latest assistant message is empty", async () => {
+  const { route } = buildRoute({
+    agentService: {
+      sendUserMessage: async () => ({
+        assistantText: "Completed with non-text output (tool-call). Ask me to summarize what I did.",
+        assistantPartTypes: ["tool-call"],
+        diagnostics: null
+      }),
+      listMessages: async () => [
+        {
+          id: "usr_1",
+          role: "user",
+          time: "2025-01-01T00:00:00.000Z",
+          text: "hello"
+        },
+        {
+          id: "asst_1",
+          role: "assistant",
+          time: "2025-01-01T00:00:01.000Z",
+          text: ""
+        }
+      ]
+    }
+  });
+
+  const response = await invoke(route, {
+    method: "POST",
+    url: "/sessions/ses_1/message",
+    body: { text: "hello" }
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.json.assistant.role, "assistant");
+  assert.equal(
+    response.json.assistant.text,
+    "Completed with non-text output (tool-call). Ask me to summarize what I did."
+  );
+});
+
 test("GET /sessions/:id/messages delegates message listing to agentService", async () => {
   const { route, calls } = buildRoute();
   const response = await invoke(route, {
@@ -278,6 +317,26 @@ test("POST /sessions/:id/message rejects malformed JSON", async () => {
 
   assert.equal(response.statusCode, 400);
   assert.equal(response.json.error, "Invalid JSON body");
+});
+
+test("POST /sessions/:id/message returns 504 when upstream times out", async () => {
+  const { route } = buildRoute({
+    agentService: {
+      sendUserMessage: async () => {
+        throw new Error("OpenCode POST /session/ses_1/message timed out after 180000ms");
+      }
+    }
+  });
+
+  const response = await invoke(route, {
+    method: "POST",
+    url: "/sessions/ses_1/message",
+    body: { text: "hello" }
+  });
+
+  assert.equal(response.statusCode, 504);
+  assert.equal(response.json.error, "Request timed out");
+  assert.match(response.json.detail, /timed out/i);
 });
 
 test("GET /workspace returns agent working directory info", async () => {

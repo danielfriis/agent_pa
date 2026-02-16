@@ -114,6 +114,13 @@ export const createRouteHandler = ({
         sendJson(res, 400, { error: detail });
         return;
       }
+      if (detail.includes("timed out")) {
+        sendJson(res, 504, {
+          error: "Request timed out",
+          detail
+        });
+        return;
+      }
 
       sendJson(res, 500, {
         error: "Request failed",

@@ -80,3 +80,49 @@ test("sendUserMessage does not retry non-connectivity errors", async () => {
   assert.equal(sendCalls, 1);
   assert.equal(healthCalls, 0);
 });
+
+test("sendUserMessage returns fallback text for non-text assistant outputs", async () => {
+  const upserts = [];
+
+  const service = createAgentService({
+    opencodeClient: {
+      health: async () => ({ ok: true }),
+      sendMessage: async () => ({
+        parts: [{ type: "tool-call" }]
+      }),
+      listMessages: async () => [
+        {
+          info: { role: "user" },
+          parts: [{ type: "text", text: "run it" }]
+        },
+        {
+          info: { role: "assistant" },
+          parts: [{ type: "tool-call" }]
+        }
+      ]
+    },
+    sessionStore: {
+      upsertSession: async (sessionId, patch) => {
+        upserts.push({ sessionId, patch });
+      }
+    },
+    withMemorySystem: passthroughMemory
+  });
+
+  const result = await service.sendUserMessage({
+    sessionId: "ses_1",
+    text: "run it"
+  });
+
+  assert.equal(
+    result.assistantText,
+    "Completed with non-text output (tool-call). Ask me to summarize what I did."
+  );
+  assert.deepEqual(result.assistantPartTypes, ["tool-call"]);
+  assert.equal(result.diagnostics, null);
+  assert.equal(upserts.length, 1);
+  assert.equal(
+    upserts[0].patch.lastAssistantMessage,
+    "Completed with non-text output (tool-call). Ask me to summarize what I did."
+  );
+});

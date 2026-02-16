@@ -39,16 +39,18 @@ export const createSessionRouteHandler = ({ agentService }) => async (req, res, 
     });
 
     const normalized = await agentService.listMessages(sessionId);
-    const assistant =
-      latestAssistantMessage(normalized) ||
-      (reply.assistantText
+    const latest = latestAssistantMessage(normalized);
+    const latestHasText = Boolean(latest?.text && latest.text.trim());
+    const assistant = latestHasText
+      ? latest
+      : reply.assistantText
         ? {
-            id: null,
+            id: latest?.id || null,
             role: "assistant",
-            time: null,
+            time: latest?.time || null,
             text: reply.assistantText
           }
-        : null);
+        : latest || null;
 
     sendJson(res, 200, {
       sessionId,

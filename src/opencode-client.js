@@ -12,6 +12,10 @@ export class OpenCodeClient {
     this.username = config.username;
     this.password = config.password;
     this.autostart = config.autostart;
+    this.requestTimeoutMs =
+      Number.isFinite(config.requestTimeoutMs) && config.requestTimeoutMs >= 0
+        ? config.requestTimeoutMs
+        : 0;
     this.proc = null;
   }
 
@@ -70,12 +74,34 @@ export class OpenCodeClient {
     const headers = { "content-type": "application/json", ...(options.headers || {}) };
     const auth = this.authHeader;
     if (auth) headers.authorization = auth;
+    const timeoutMs = Number.isFinite(options.timeoutMs)
+      ? options.timeoutMs
+      : this.requestTimeoutMs;
+    const controller = timeoutMs > 0 ? new AbortController() : null;
+    const timeoutHandle =
+      controller &&
+      setTimeout(() => {
+        controller.abort();
+      }, timeoutMs);
 
-    const response = await fetch(url, {
-      method: options.method || "GET",
-      headers,
-      body: options.body ? JSON.stringify(options.body) : undefined
-    });
+    let response;
+    try {
+      response = await fetch(url, {
+        method: options.method || "GET",
+        headers,
+        body: options.body ? JSON.stringify(options.body) : undefined,
+        signal: controller?.signal
+      });
+    } catch (error) {
+      if (controller?.signal.aborted && error instanceof Error && error.name === "AbortError") {
+        throw new Error(
+          `OpenCode ${options.method || "GET"} ${pathname} timed out after ${timeoutMs}ms`
+        );
+      }
+      throw error;
+    } finally {
+      if (timeoutHandle) clearTimeout(timeoutHandle);
+    }
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -130,6 +156,7 @@ export class OpenCodeClient {
       method: "GET",
       headers: { accept: "text/event-stream" },
       noDirectory: true,
+      timeoutMs: 0,
       raw: true
     });
 

@@ -166,7 +166,9 @@ write_env_file() {
   upsert_env "OPENCODE_SERVER_HOST" "127.0.0.1"
   upsert_env "OPENCODE_SERVER_PORT" "${OPENCODE_PORT}"
   upsert_env "OPENCODE_DIRECTORY" "${REPO_DIR}/agent_workspace"
+  upsert_env "OPENCODE_REQUEST_TIMEOUT_MS" "0"
   upsert_env "AUTOSTART_OPENCODE" "true"
+  upsert_env "OPENCODE_ENABLE_EXA" "true"
 
   upsert_env "APP_REQUIRE_AUTH" "true"
   upsert_env "APP_API_TOKEN" "${APP_API_TOKEN_INPUT}"
@@ -226,6 +228,10 @@ server {
     proxy_set_header X-Forwarded-Proto \$scheme;
     proxy_set_header Connection "";
     proxy_set_header Authorization \$http_authorization;
+    proxy_connect_timeout 75s;
+    proxy_send_timeout 86400s;
+    proxy_read_timeout 86400s;
+    send_timeout 86400s;
     proxy_pass http://127.0.0.1:${APP_PORT};
   }
 }

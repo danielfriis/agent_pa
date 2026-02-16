@@ -22,6 +22,19 @@ const isOpenCodeUnavailable = (error) => {
   return detail.includes("fetch failed") || detail.includes("ECONNREFUSED");
 };
 
+const fallbackAssistantText = ({ assistantPartTypes = [], diagnostics = null }) => {
+  const uniquePartTypes = [...new Set(assistantPartTypes.filter((type) => typeof type === "string"))];
+  if (uniquePartTypes.length) {
+    return `Completed with non-text output (${uniquePartTypes.join(", ")}). Ask me to summarize what I did.`;
+  }
+
+  if (diagnostics?.latestAssistantInfo && diagnostics.latestAssistantInfo !== "none") {
+    return `I finished processing but no plain-text reply was produced (${diagnostics.latestAssistantInfo}). Ask me to summarize what happened.`;
+  }
+
+  return "I finished processing but no plain-text reply was produced. Ask me to summarize what happened.";
+};
+
 export const createAgentService = ({
   opencodeClient,
   sessionStore,
@@ -120,6 +133,7 @@ export const createAgentService = ({
     const result = await sendMessageWithRecovery(sessionId, payload);
     let assistantText = extractText(result?.parts || []);
     let assistantPartTypes = [];
+    let diagnostics = null;
 
     if (!assistantText.trim()) {
       const historyOutput = await readAssistantReplyFromHistory(opencodeClient, sessionId, text);
@@ -127,30 +141,30 @@ export const createAgentService = ({
       assistantPartTypes = historyOutput.partTypes;
     }
 
-    await sessionStore.upsertSession(sessionId, {
-      lastUserMessage: text,
-      lastAssistantMessage: assistantText,
-      lastMessageAt: new Date().toISOString()
-    });
-
-    if (assistantText || assistantPartTypes.length) {
-      return {
-        assistantText,
-        assistantPartTypes,
-        diagnostics: null
-      };
-    }
-
-    const messages = await opencodeClient.listMessages(sessionId);
-    const raw = latestAssistantRaw(messages);
-    return {
-      assistantText,
-      assistantPartTypes,
-      diagnostics: {
+    if (!assistantText.trim() && !assistantPartTypes.length) {
+      const messages = await opencodeClient.listMessages(sessionId);
+      const raw = latestAssistantRaw(messages);
+      diagnostics = {
         recentMessages: summarizeRecentMessages(messages),
         latestAssistantInfo: summarizeLatestAssistantInfo(messages),
         latestAssistantRaw: raw
-      }
+      };
+    }
+
+    const assistantTextForUser = assistantText.trim()
+      ? assistantText
+      : fallbackAssistantText({ assistantPartTypes, diagnostics });
+
+    await sessionStore.upsertSession(sessionId, {
+      lastUserMessage: text,
+      lastAssistantMessage: assistantTextForUser,
+      lastMessageAt: new Date().toISOString()
+    });
+
+    return {
+      assistantText: assistantTextForUser,
+      assistantPartTypes,
+      diagnostics
     };
   };
 
