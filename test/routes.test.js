@@ -4,8 +4,13 @@ import { Readable } from "node:stream";
 
 import { createRouteHandler } from "../src/routes.js";
 
-const createRequest = ({ method, url, body, headers = {} }) => {
-  const payload = body === undefined ? [] : [Buffer.from(JSON.stringify(body))];
+const createRequest = ({ method, url, body, rawBody, headers = {} }) => {
+  const payload = [];
+  if (rawBody !== undefined) {
+    payload.push(Buffer.from(rawBody));
+  } else if (body !== undefined) {
+    payload.push(Buffer.from(JSON.stringify(body)));
+  }
   const req = Readable.from(payload);
   req.method = method;
   req.url = url;
@@ -27,11 +32,17 @@ const createResponse = () => {
       body += chunk.toString();
     },
     result() {
+      const contentType =
+        responseHeaders["content-type"] || responseHeaders["Content-Type"] || "";
+      let json = null;
+      if (body && String(contentType).includes("application/json")) {
+        json = JSON.parse(body);
+      }
       return {
         statusCode,
         headers: responseHeaders,
         body,
-        json: body ? JSON.parse(body) : null
+        json
       };
     }
   };
@@ -42,7 +53,10 @@ const buildRoute = (overrides = {}) => {
     createSession: [],
     sendUserMessage: [],
     listSessions: 0,
-    listMessages: []
+    listMessages: [],
+    appendMemory: [],
+    writeSystemPrompt: [],
+    smsInbound: []
   };
 
   const opencodeClient = {
@@ -78,9 +92,13 @@ const buildRoute = (overrides = {}) => {
     summary: () => ({ rootDir: "/tmp/config", skillsDir: "/tmp/config/skills" }),
     listSkills: async () => [],
     readMemory: async () => "",
-    appendMemory: async () => {},
+    appendMemory: async (text) => {
+      calls.appendMemory.push(text);
+    },
     readSystemPrompt: async () => "",
-    writeSystemPrompt: async () => {},
+    writeSystemPrompt: async (text) => {
+      calls.writeSystemPrompt.push(text);
+    },
     ...overrides.workspace
   };
 
@@ -122,7 +140,37 @@ const buildRoute = (overrides = {}) => {
   const config = {
     agent: { workspaceDir: "/tmp/workspace" },
     memory: { maxChars: 2000 },
+    opencode: { directory: "/tmp/workspace" },
+    security: {
+      requireAuth: false,
+      apiToken: "",
+      allowUnauthenticatedHealth: true
+    },
+    channels: {
+      sms: {
+        enabled: false,
+        inboundPath: "/channels/sms/inbound",
+        allowUnauthenticatedInbound: true
+      }
+    },
     ...overrides.config
+  };
+
+  const smsChannelService = {
+    isEnabled: () => Boolean(config.channels?.sms?.enabled),
+    inboundPath: () => config.channels?.sms?.inboundPath || "/channels/sms/inbound",
+    handleInboundWebhook: async (args) => {
+      calls.smsInbound.push(args);
+      return {
+        ok: true,
+        status: 200,
+        response: {
+          contentType: "text/xml; charset=utf-8",
+          body: '<?xml version="1.0" encoding="UTF-8"?><Response><Message>ok</Message></Response>'
+        }
+      };
+    },
+    ...overrides.smsChannelService
   };
 
   const route = createRouteHandler({
@@ -130,7 +178,8 @@ const buildRoute = (overrides = {}) => {
     sessionStore,
     workspace,
     config,
-    agentService
+    agentService,
+    smsChannelService
   });
 
   return { route, calls };
@@ -229,6 +278,210 @@ test("POST /sessions/:id/message rejects malformed JSON", async () => {
 
   assert.equal(response.statusCode, 400);
   assert.equal(response.json.error, "Invalid JSON body");
+});
+
+test("GET /workspace returns agent working directory info", async () => {
+  const { route } = buildRoute({
+    config: {
+      agent: { workspaceDir: "/tmp/workspace" },
+      opencode: { directory: "/tmp/opencode-workspace" }
+    }
+  });
+
+  const response = await invoke(route, {
+    method: "GET",
+    url: "/workspace"
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.json, {
+    workspaceDir: "/tmp/workspace",
+    opencodeDirectory: "/tmp/opencode-workspace"
+  });
+});
+
+test("POST /channels/sms/inbound delegates form payload to sms channel service", async () => {
+  const { route, calls } = buildRoute({
+    config: {
+      channels: {
+        sms: {
+          enabled: true,
+          inboundPath: "/channels/sms/inbound",
+          allowUnauthenticatedInbound: true
+        }
+      }
+    }
+  });
+
+  const response = await invoke(route, {
+    method: "POST",
+    url: "/channels/sms/inbound",
+    rawBody: "From=%2B15550001111&To=%2B15559998888&Body=hello",
+    headers: {
+      "content-type": "application/x-www-form-urlencoded"
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.headers["content-type"], "text/xml; charset=utf-8");
+  assert.equal(calls.smsInbound.length, 1);
+  assert.equal(calls.smsInbound[0].form.From, "+15550001111");
+  assert.equal(calls.smsInbound[0].form.To, "+15559998888");
+  assert.equal(calls.smsInbound[0].form.Body, "hello");
+});
+
+test("POST /channels/sms/inbound bypasses app token auth when configured", async () => {
+  const { route, calls } = buildRoute({
+    config: {
+      security: {
+        requireAuth: true,
+        apiToken: "secret-token",
+        allowUnauthenticatedHealth: true
+      },
+      channels: {
+        sms: {
+          enabled: true,
+          inboundPath: "/channels/sms/inbound",
+          allowUnauthenticatedInbound: true
+        }
+      }
+    }
+  });
+
+  const response = await invoke(route, {
+    method: "POST",
+    url: "/channels/sms/inbound",
+    rawBody: "From=%2B15550001111&To=%2B15559998888&Body=hello",
+    headers: {
+      "content-type": "application/x-www-form-urlencoded"
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(calls.smsInbound.length, 1);
+});
+
+test("POST /channels/sms/inbound requires auth when bypass is disabled", async () => {
+  const { route } = buildRoute({
+    config: {
+      security: {
+        requireAuth: true,
+        apiToken: "secret-token",
+        allowUnauthenticatedHealth: true
+      },
+      channels: {
+        sms: {
+          enabled: true,
+          inboundPath: "/channels/sms/inbound",
+          allowUnauthenticatedInbound: false
+        }
+      }
+    }
+  });
+
+  const response = await invoke(route, {
+    method: "POST",
+    url: "/channels/sms/inbound",
+    rawBody: "From=%2B15550001111&To=%2B15559998888&Body=hello",
+    headers: {
+      "content-type": "application/x-www-form-urlencoded"
+    }
+  });
+
+  assert.equal(response.statusCode, 401);
+  assert.equal(response.json.error, "Unauthorized");
+});
+
+test("legacy /workspace/* state routes are no longer exposed", async () => {
+  const { route } = buildRoute();
+  const response = await invoke(route, {
+    method: "GET",
+    url: "/workspace/memory"
+  });
+
+  assert.equal(response.statusCode, 404);
+  assert.deepEqual(response.json, { error: "Not found" });
+});
+
+test("GET /state returns state summary with memory preview and skills", async () => {
+  const { route } = buildRoute({
+    workspace: {
+      summary: () => ({
+        rootDir: "/tmp/config",
+        memoryFile: "/tmp/config/memory/memory.md",
+        systemPromptFile: "/tmp/config/system/system-prompt.md",
+        skillsDir: "/tmp/config/skills",
+        sessionsDir: "/tmp/config/sessions"
+      }),
+      listSkills: async () => ["skill-a.md", "skill-b.md"],
+      readMemory: async () => "persisted memory text"
+    },
+    config: {
+      memory: { maxChars: 8 }
+    }
+  });
+
+  const response = await invoke(route, {
+    method: "GET",
+    url: "/state"
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.json, {
+    rootDir: "/tmp/config",
+    memoryFile: "/tmp/config/memory/memory.md",
+    systemPromptFile: "/tmp/config/system/system-prompt.md",
+    skillsDir: "/tmp/config/skills",
+    sessionsDir: "/tmp/config/sessions",
+    skills: ["skill-a.md", "skill-b.md"],
+    memoryPreview: "ory text"
+  });
+});
+
+test("POST /state/memory appends memory and returns updated memory", async () => {
+  let memory = "";
+  const { route, calls } = buildRoute({
+    workspace: {
+      readMemory: async () => memory,
+      appendMemory: async (text) => {
+        calls.appendMemory.push(text);
+        memory = `saved: ${text}`;
+      }
+    }
+  });
+
+  const response = await invoke(route, {
+    method: "POST",
+    url: "/state/memory",
+    body: { text: "Remember this" }
+  });
+
+  assert.equal(response.statusCode, 201);
+  assert.deepEqual(calls.appendMemory, ["Remember this"]);
+  assert.equal(response.json.memory, "saved: Remember this");
+});
+
+test("POST /state/system writes system prompt and returns effective prompt", async () => {
+  let systemPrompt = "";
+  const { route, calls } = buildRoute({
+    workspace: {
+      readSystemPrompt: async () => systemPrompt,
+      writeSystemPrompt: async (text) => {
+        calls.writeSystemPrompt.push(text);
+        systemPrompt = `stored: ${text}`;
+      }
+    }
+  });
+
+  const response = await invoke(route, {
+    method: "POST",
+    url: "/state/system",
+    body: { systemPrompt: "You are concise." }
+  });
+
+  assert.equal(response.statusCode, 201);
+  assert.deepEqual(calls.writeSystemPrompt, ["You are concise."]);
+  assert.equal(response.json.systemPrompt, "stored: You are concise.");
 });
 
 test("authenticated routes return 401 when auth is enabled and token is missing", async () => {

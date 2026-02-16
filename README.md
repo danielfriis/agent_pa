@@ -11,6 +11,66 @@ This project keeps the shell thin and delegates agent behavior to OpenCode over 
 
 Core concepts in this project are workspace, skills, tools, memory, channels, and installation.
 
+## Core Concepts (Product Slices)
+
+### Workspace
+
+- Purpose: the agent's file-working area for task execution.
+- Boundaries: source files, generated files, and runtime working context only.
+- Default path: `agent_workspace/`.
+- Interfaces:
+  - `GET /workspace` returns workspace path info (`workspaceDir`, `opencodeDirectory`).
+  - Terminal command: `/workspace`.
+
+### Memory
+
+- Purpose: persistent context and preferences that carry across sessions.
+- Storage: `agent_config/memory/memory.md`.
+- Includes persistent system prompt files under `agent_config/system/*.md`.
+- Interfaces:
+  - `GET /state/memory`
+  - `POST /state/memory`
+  - `GET /state/system`
+  - `POST /state/system`
+  - Terminal commands: `/memory`, `/remember TEXT`.
+
+### Skills
+
+- Purpose: reusable instruction bundles for repeatable task handling.
+- Storage: `agent_config/skills/`.
+- Runtime sync target: `OPENCODE_DIRECTORY/.opencode/skills/`.
+- Interfaces:
+  - `GET /state/skills`
+  - Terminal commands: `/skills`, `/skill-new NAME`.
+
+### Tools
+
+- Purpose: explicit side-effect interfaces callable by the agent.
+- Storage: `agent_config/tools/` (including managed defaults like `add_memory.js`).
+- Runtime sync target: `OPENCODE_DIRECTORY/.opencode/tools/`.
+- Contract:
+  - Success shape: `{ ok: true, ... }`
+  - Failure shape: `{ ok: false, error: "..." }`.
+
+### Channels
+
+- Purpose: user-facing surfaces that reuse the same service contracts.
+- Current channels:
+  - HTTP API routes.
+  - SMS inbound webhook route (`/channels/sms/inbound`) with provider adapter boundary (currently Twilio).
+  - Terminal chat adapter.
+- Shared service boundary: `src/agent-service.js`.
+
+### Installation
+
+- Purpose: reproducible local and remote setup.
+- Local:
+  - `npm run check`
+  - `npm run start:server`
+- Remote:
+  - Initial setup: `./deploy/setup-server.sh`
+  - Updates: `./deploy/update-server.sh`.
+
 ## What is implemented (v0)
 
 - Minimal HTTP API:
@@ -19,13 +79,15 @@ Core concepts in this project are workspace, skills, tools, memory, channels, an
   - `POST /sessions` - create session in OpenCode
   - `POST /sessions/:id/message` - send text message and return normalized message history
   - `GET /sessions/:id/messages` - list normalized messages
-  - `GET /workspace` - show workspace paths, memory preview, and skills
-  - `GET /workspace/memory` - read memory file
-  - `POST /workspace/memory` - append memory (`{"text":"..."}`)
-  - `GET /workspace/system` - read effective system prompt (concatenated from `system/*.md`)
-  - `POST /workspace/system` - set persistent system prompt (`{"systemPrompt":"..."}`)
-  - `GET /workspace/skills` - list local skills
+  - `GET /workspace` - show agent working directory paths
+  - `GET /state` - show agent state paths, memory preview, and skills
+  - `GET /state/memory` - read memory file
+  - `POST /state/memory` - append memory (`{"text":"..."}`)
+  - `GET /state/system` - read effective system prompt (concatenated from `system/*.md`)
+  - `POST /state/system` - set persistent system prompt (`{"systemPrompt":"..."}`)
+  - `GET /state/skills` - list local skills
   - `GET /events` - proxy OpenCode global SSE stream
+  - `POST /channels/sms/inbound` - SMS inbound webhook endpoint (provider selected by env, Twilio supported now)
 - Agent runtime workspace folder (`agent_workspace/`) used as OpenCode working directory.
 - Agent config folder (`agent_config/`) with:
   - `memory/memory.md`
@@ -69,6 +131,8 @@ Session metadata files default to `agent_config/sessions/` and can be overridden
 API auth defaults to off. If `APP_API_TOKEN` is set, auth is enabled automatically unless
 `APP_REQUIRE_AUTH=false`. Use `Authorization: Bearer <token>` or `x-api-key: <token>`.
 `GET /health` remains public by default; set `APP_ALLOW_UNAUTHENTICATED_HEALTH=false` to protect it.
+When SMS is enabled, `/channels/sms/inbound` can be kept public with
+`SMS_ALLOW_UNAUTHENTICATED_INBOUND=true` and protected with provider signature verification.
 
 Start modes:
 - `npm run start:server` starts only the HTTP server so channel clients can connect.
@@ -94,8 +158,53 @@ Commands:
 - `/exit`
 
 Memory is automatically injected as system context from `agent_config/memory/memory.md` for each prompt.
-All markdown files in `agent_config/system/` are loaded in filename order and prepended to each prompt. `POST /workspace/system` writes to `agent_config/system/system-prompt.md`.
+All markdown files in `agent_config/system/` are loaded in filename order and prepended to each prompt. `POST /state/system` writes to `agent_config/system/system-prompt.md`.
 Runtime OpenCode extensions and copied skills/tools live under `OPENCODE_DIRECTORY/.opencode/`.
+
+## Twilio SMS Setup
+
+This project now has a provider-agnostic SMS channel service with a Twilio adapter.
+The conversation mapping is number-agnostic: sessions are keyed by `(provider, accountSid, to, from)`,
+so multiple Twilio numbers can use the same endpoint without hardcoded numbers.
+
+1. Configure `.env`:
+
+```bash
+SMS_ENABLED=true
+SMS_PROVIDER=twilio
+SMS_INBOUND_PATH=/channels/sms/inbound
+SMS_ALLOW_UNAUTHENTICATED_INBOUND=true
+SMS_MAX_REPLY_CHARS=320
+SMS_TWILIO_AUTH_TOKEN=your_twilio_auth_token
+SMS_TWILIO_VALIDATE_SIGNATURE=true
+SMS_TWILIO_WEBHOOK_BASE_URL=https://your-public-host.example
+```
+
+2. Start the server:
+
+```bash
+npm run start:server
+```
+
+3. In Twilio Console for your phone number:
+   - Go to **Phone Numbers -> Manage -> Active numbers -> your number**.
+   - Under **Messaging**, set **A MESSAGE COMES IN** webhook to:
+     `https://your-public-host.example/channels/sms/inbound`
+   - Method: `POST`.
+
+4. Optional multi-account/BYO Twilio setup (for multiple account SIDs):
+
+```bash
+SMS_TWILIO_AUTH_TOKENS=ACxxxxxxxx:token1,ACyyyyyyyy:token2
+# or
+SMS_TWILIO_AUTH_TOKENS_JSON={"ACxxxxxxxx":"token1","ACyyyyyyyy":"token2"}
+```
+
+5. Optional destination allowlist (only accept inbound for selected Twilio numbers):
+
+```bash
+SMS_TWILIO_ALLOWED_TO_NUMBERS=+15551234567,+15557654321
+```
 
 ## Remote deployment
 
@@ -112,6 +221,19 @@ cd agent_pa
 
 The script installs dependencies, writes `.env`, generates `APP_API_TOKEN`,
 sets up `systemd` + Nginx, and starts services.
+
+Update an existing remote install:
+
+```bash
+cd agent_pa
+./deploy/update-server.sh
+```
+
+Or via npm:
+
+```bash
+npm run deploy:update:server
+```
 
 Included templates:
 - `/Users/danielfriis/Code/agent_pa/deploy/systemd/agent-pa.service.example`

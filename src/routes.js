@@ -3,21 +3,23 @@ import { URL } from "node:url";
 import { isRequestAuthorized } from "./auth.js";
 import { sendJson, sendNoContent } from "./http-utils.js";
 import { createSessionRouteHandler } from "./session-routes.js";
-import { createWorkspaceRouteHandler } from "./workspace-routes.js";
+import { createSmsRouteHandler } from "./sms-routes.js";
+import { createStateRouteHandler } from "./state-routes.js";
 
 export const createRouteHandler = ({
   opencodeClient,
   workspace,
   config,
-  agentService
+  agentService,
+  smsChannelService
 }) => {
   const handleSessionRoute = createSessionRouteHandler({ agentService });
 
-  const handleWorkspaceRoute = createWorkspaceRouteHandler({
+  const handleStateRoute = createStateRouteHandler({
     workspace,
-    agentWorkspaceDir: config.agent.workspaceDir,
     memoryPreviewChars: config.memory.maxChars
   });
+  const handleSmsRoute = createSmsRouteHandler({ smsChannelService });
 
   return async (req, res) => {
     if (!req.url) {
@@ -33,9 +35,12 @@ export const createRouteHandler = ({
     const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
     const path = url.pathname;
     const isHealthRoute = req.method === "GET" && path === "/health";
+    const isSmsInboundRoute =
+      req.method === "POST" && smsChannelService?.isEnabled() && path === smsChannelService.inboundPath();
     const requiresAuth =
       config.security?.requireAuth &&
-      (!isHealthRoute || !config.security.allowUnauthenticatedHealth);
+      (!isHealthRoute || !config.security.allowUnauthenticatedHealth) &&
+      !(isSmsInboundRoute && config.channels?.sms?.allowUnauthenticatedInbound);
 
     if (requiresAuth && !isRequestAuthorized(req.headers, config.security)) {
       sendJson(
@@ -79,8 +84,17 @@ export const createRouteHandler = ({
         return;
       }
 
+      if (req.method === "GET" && path === "/workspace") {
+        sendJson(res, 200, {
+          workspaceDir: config.agent.workspaceDir,
+          opencodeDirectory: config.opencode?.directory || config.agent.workspaceDir
+        });
+        return;
+      }
+
       if (await handleSessionRoute(req, res, path)) return;
-      if (await handleWorkspaceRoute(req, res, path)) return;
+      if (await handleStateRoute(req, res, path)) return;
+      if (await handleSmsRoute(req, res, path, url)) return;
 
       sendJson(res, 404, { error: "Not found" });
     } catch (error) {

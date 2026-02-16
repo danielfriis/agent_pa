@@ -1,28 +1,27 @@
 import { readJsonBody, sendJson } from "./http-utils.js";
 
-export const createWorkspaceRouteHandler = ({
-  workspace,
-  agentWorkspaceDir,
-  memoryPreviewChars
-}) => async (req, res, path) => {
-  if (req.method === "GET" && path === "/workspace") {
+export const createStateRouteHandler = ({ workspace, memoryPreviewChars }) => async (
+  req,
+  res,
+  path
+) => {
+  if (req.method === "GET" && path === "/state") {
     const [skills, memory] = await Promise.all([workspace.listSkills(), workspace.readMemory()]);
     sendJson(res, 200, {
       ...workspace.summary(),
-      agentWorkspaceDir,
       skills,
       memoryPreview: memory.slice(-memoryPreviewChars)
     });
     return true;
   }
 
-  if (req.method === "GET" && path === "/workspace/memory") {
+  if (req.method === "GET" && path === "/state/memory") {
     const memory = await workspace.readMemory();
     sendJson(res, 200, { memory });
     return true;
   }
 
-  if (req.method === "POST" && path === "/workspace/memory") {
+  if (req.method === "POST" && path === "/state/memory") {
     const body = await readJsonBody(req);
     if (typeof body.text !== "string" || !body.text.trim()) {
       sendJson(res, 400, { error: "Body must include string field `text`." });
@@ -34,13 +33,13 @@ export const createWorkspaceRouteHandler = ({
     return true;
   }
 
-  if (req.method === "GET" && path === "/workspace/system") {
+  if (req.method === "GET" && path === "/state/system") {
     const systemPrompt = await workspace.readSystemPrompt();
     sendJson(res, 200, { systemPrompt });
     return true;
   }
 
-  if (req.method === "POST" && path === "/workspace/system") {
+  if (req.method === "POST" && path === "/state/system") {
     const body = await readJsonBody(req);
     if (typeof body.systemPrompt !== "string") {
       sendJson(res, 400, { error: "Body must include string field `systemPrompt`." });
@@ -52,7 +51,7 @@ export const createWorkspaceRouteHandler = ({
     return true;
   }
 
-  if (req.method === "GET" && path === "/workspace/skills") {
+  if (req.method === "GET" && path === "/state/skills") {
     const skills = await workspace.listSkills();
     sendJson(res, 200, { skills, skillsDir: workspace.summary().skillsDir });
     return true;

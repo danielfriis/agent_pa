@@ -10,6 +10,41 @@ const int = (value, fallback) => {
   return Number.isNaN(parsed) ? fallback : parsed;
 };
 
+const csv = (value) =>
+  String(value || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+const parseSidTokenPairs = (value) => {
+  const entries = csv(value);
+  const output = {};
+  for (const entry of entries) {
+    const separator = entry.indexOf(":");
+    if (separator <= 0) continue;
+    const sid = entry.slice(0, separator).trim();
+    const token = entry.slice(separator + 1).trim();
+    if (!sid || !token) continue;
+    output[sid] = token;
+  }
+  return output;
+};
+
+const parseJsonRecord = (value) => {
+  if (!value) return {};
+  try {
+    const parsed = JSON.parse(value);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    return Object.fromEntries(
+      Object.entries(parsed)
+        .map(([key, recordValue]) => [String(key).trim(), String(recordValue || "").trim()])
+        .filter(([key, recordValue]) => key && recordValue)
+    );
+  } catch {
+    return {};
+  }
+};
+
 const resolveDir = (value, fallback) => path.resolve(value || fallback);
 
 const agentWorkspaceDir = resolveDir(
@@ -19,6 +54,15 @@ const agentWorkspaceDir = resolveDir(
 const agentConfigDir = resolveDir(
   process.env.AGENT_CONFIG_DIR,
   path.resolve(process.cwd(), "agent_config")
+);
+
+const twilioAuthToken = process.env.SMS_TWILIO_AUTH_TOKEN || process.env.TWILIO_AUTH_TOKEN || "";
+const twilioAuthTokensByAccountSid = {
+  ...parseSidTokenPairs(process.env.SMS_TWILIO_AUTH_TOKENS),
+  ...parseJsonRecord(process.env.SMS_TWILIO_AUTH_TOKENS_JSON)
+};
+const twilioShouldValidateSignaturesByDefault = Boolean(
+  twilioAuthToken || Object.keys(twilioAuthTokensByAccountSid).length
 );
 
 export const config = {
@@ -49,5 +93,29 @@ export const config = {
     username: process.env.OPENCODE_SERVER_USERNAME || "opencode",
     password: process.env.OPENCODE_SERVER_PASSWORD || "",
     autostart: bool(process.env.AUTOSTART_OPENCODE, true)
+  },
+  channels: {
+    sms: {
+      enabled: bool(process.env.SMS_ENABLED, false),
+      provider: (process.env.SMS_PROVIDER || "twilio").toLowerCase(),
+      inboundPath: process.env.SMS_INBOUND_PATH || "/channels/sms/inbound",
+      allowUnauthenticatedInbound: bool(process.env.SMS_ALLOW_UNAUTHENTICATED_INBOUND, true),
+      maxReplyChars: int(process.env.SMS_MAX_REPLY_CHARS, 320),
+      defaultSystemPrompt:
+        process.env.SMS_DEFAULT_SYSTEM_PROMPT ||
+        "You are replying to a user over SMS. Respond with plain text only and keep it concise.",
+      fallbackReply:
+        process.env.SMS_FALLBACK_REPLY || "I hit an error processing that. Please try again shortly.",
+      twilio: {
+        authToken: twilioAuthToken,
+        authTokensByAccountSid: twilioAuthTokensByAccountSid,
+        validateSignature: bool(
+          process.env.SMS_TWILIO_VALIDATE_SIGNATURE,
+          twilioShouldValidateSignaturesByDefault
+        ),
+        webhookBaseUrl: process.env.SMS_TWILIO_WEBHOOK_BASE_URL || "",
+        allowedToNumbers: csv(process.env.SMS_TWILIO_ALLOWED_TO_NUMBERS)
+      }
+    }
   }
 };

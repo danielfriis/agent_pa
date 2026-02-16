@@ -38,12 +38,42 @@ Optional flags:
 ./deploy/setup-server.sh --server-name agent.example.com --app-port 8787 --opencode-port 4096
 ```
 
+## Updating after install
+
+When the server is already installed and you want the latest code/dependencies:
+
+```bash
+cd agent_pa
+./deploy/update-server.sh
+```
+
+What this does:
+
+1. Pulls the latest git changes with `--ff-only`.
+2. Reinstalls production dependencies (`npm ci --omit=dev`).
+3. Runs `npm run check:syntax`.
+4. Restarts `agent-pa` with systemd.
+5. Verifies `/health` on localhost.
+
+Useful options:
+
+```bash
+./deploy/update-server.sh --branch main
+./deploy/update-server.sh --skip-check
+./deploy/update-server.sh --skip-deps
+```
+
 ## Result
 
 After setup, service is reachable at:
 
-- `http://<server-ip>/health`
-- `http://<server-ip>/sessions` (requires `Authorization: Bearer <token>`)
+- `http://<server-ip>:80/health`
+- `http://<server-ip>:80/sessions` (requires `Authorization: Bearer <token>`)
+
+Routing note:
+- External traffic goes to Nginx on port `80`.
+- Nginx proxies to the app on `127.0.0.1:8787` (or your `--app-port` value).
+- `https://` is not enabled by default; configure TLS first.
 
 The script prints the generated `APP_API_TOKEN` at the end.
 

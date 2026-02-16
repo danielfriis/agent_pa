@@ -4,13 +4,20 @@ export const CORS_HEADERS = Object.freeze({
   "access-control-allow-headers": "content-type,authorization"
 });
 
-export const sendJson = (res, status, payload, headers = {}) => {
+export const sendRaw = (res, status, body, { contentType, headers = {} } = {}) => {
   res.writeHead(status, {
-    "content-type": "application/json",
+    ...(contentType ? { "content-type": contentType } : {}),
     ...CORS_HEADERS,
     ...headers
   });
-  res.end(JSON.stringify(payload));
+  res.end(body);
+};
+
+export const sendJson = (res, status, payload, headers = {}) => {
+  sendRaw(res, status, JSON.stringify(payload), {
+    contentType: "application/json",
+    headers
+  });
 };
 
 export const sendNoContent = (res, status = 204) => {
@@ -18,14 +25,39 @@ export const sendNoContent = (res, status = 204) => {
   res.end();
 };
 
-export const readJsonBody = async (req) => {
+export const readRawBody = async (req) => {
   const chunks = [];
   for await (const chunk of req) chunks.push(chunk);
-  if (!chunks.length) return {};
+  if (!chunks.length) return Buffer.alloc(0);
+  return Buffer.concat(chunks);
+};
+
+export const readJsonBody = async (req) => {
+  const rawBody = await readRawBody(req);
+  if (!rawBody.length) return {};
 
   try {
-    return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    return JSON.parse(rawBody.toString("utf8"));
   } catch {
     throw new Error("Invalid JSON body");
   }
+};
+
+export const readFormBody = async (req) => {
+  const rawBody = await readRawBody(req);
+  if (!rawBody.length) return {};
+
+  const body = {};
+  const params = new URLSearchParams(rawBody.toString("utf8"));
+  for (const [key, value] of params) {
+    if (!Object.hasOwn(body, key)) {
+      body[key] = value;
+      continue;
+    }
+
+    const current = body[key];
+    body[key] = Array.isArray(current) ? [...current, value] : [current, value];
+  }
+
+  return body;
 };

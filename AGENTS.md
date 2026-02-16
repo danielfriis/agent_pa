@@ -31,6 +31,7 @@ This project is an agent for people to complete many different tasks. Each agent
 6. Split files only for clear boundary or reuse value.
 7. Treat architecture as a top priority; always assess architectural impact before implementing.
 8. After implementation, review the result against the architecture and refine it if needed.
+9. Treat each core concept as its own product slice with coherent ownership; group related interfaces, modules, and docs together under that concept instead of mixing concerns.
 
 ## Contracts
 

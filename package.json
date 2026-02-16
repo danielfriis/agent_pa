@@ -8,7 +8,8 @@
     "start": "npm run start:server",
     "start:server": "node src/server.js --no-chat",
     "start:terminal": "node src/server.js --chat",
-    "check:syntax": "node --check src/server.js && node --check src/bootstrap.js && node --check src/routes.js && node --check src/session-routes.js && node --check src/workspace-routes.js && node --check src/http-utils.js && node --check src/chat.js && node --check src/agent-service.js && node --check src/message-utils.js && node --check src/memory-system.js && node --check src/path-utils.js && node --check src/config.js && node --check src/auth.js && node --check src/opencode-client.js && node --check src/session-store.js && node --check src/workspace.js && node --check src/opencode-sync.js && node --check src/remember-command.js",
+    "deploy:update:server": "./deploy/update-server.sh",
+    "check:syntax": "node --check src/server.js && node --check src/bootstrap.js && node --check src/routes.js && node --check src/session-routes.js && node --check src/state-routes.js && node --check src/sms-routes.js && node --check src/sms-channel-service.js && node --check src/sms-provider-twilio.js && node --check src/http-utils.js && node --check src/chat.js && node --check src/agent-service.js && node --check src/message-utils.js && node --check src/memory-system.js && node --check src/path-utils.js && node --check src/config.js && node --check src/auth.js && node --check src/opencode-client.js && node --check src/session-store.js && node --check src/workspace.js && node --check src/opencode-sync.js && node --check src/remember-command.js",
     "test": "node --test",
     "check": "npm run check:syntax && npm run test"
   },

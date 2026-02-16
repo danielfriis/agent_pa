@@ -10,6 +10,7 @@ import { createMemorySystemInjector } from "./memory-system.js";
 import { OpenCodeClient } from "./opencode-client.js";
 import { syncOpenCodeConfig, syncOpenCodeSkills } from "./opencode-sync.js";
 import { createRouteHandler } from "./routes.js";
+import { createSmsChannelService } from "./sms-channel-service.js";
 import { SessionStore } from "./session-store.js";
 import { AgentWorkspace } from "./workspace.js";
 
@@ -31,6 +32,11 @@ export const main = async () => {
     opencodeClient,
     sessionStore,
     withMemorySystem
+  });
+  const smsChannelService = createSmsChannelService({
+    agentService,
+    sessionStore,
+    config
   });
 
   await fs.mkdir(config.agent.workspaceDir, { recursive: true });
@@ -61,7 +67,8 @@ export const main = async () => {
     opencodeClient,
     workspace,
     config,
-    agentService
+    agentService,
+    smsChannelService
   });
 
   const server = http.createServer((req, res) => {

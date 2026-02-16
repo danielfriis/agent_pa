@@ -212,8 +212,8 @@ write_nginx_config() {
   log "Writing ${NGINX_SITE_PATH}"
   sudo tee "${NGINX_SITE_PATH}" >/dev/null <<EOF
 server {
-  listen 80;
-  listen [::]:80;
+  listen 80 default_server;
+  listen [::]:80 default_server;
   server_name ${SERVER_NAME};
 
   client_max_body_size 10m;
