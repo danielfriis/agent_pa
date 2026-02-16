@@ -40,6 +40,7 @@ export const main = async () => {
   const updateCommandService = createUpdateCommandService({
     enabled: config.maintenance.updateCommandEnabled,
     scriptPath: config.maintenance.updateScriptPath,
+    statusFilePath: config.maintenance.updateStatusFilePath,
     timeoutMs: config.maintenance.updateCommandTimeoutMs,
     maxOutputChars: config.maintenance.updateCommandMaxOutputChars
   });

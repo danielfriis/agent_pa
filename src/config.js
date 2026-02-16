@@ -117,6 +117,10 @@ export const config = {
       process.env.UPDATE_SCRIPT_PATH,
       path.resolve(process.cwd(), "deploy/update-server.sh")
     ),
+    updateStatusFilePath: resolveDir(
+      process.env.UPDATE_STATUS_FILE,
+      path.resolve(agentConfigDir, "maintenance", "update-status.json")
+    ),
     updateCommandTimeoutMs: int(process.env.UPDATE_COMMAND_TIMEOUT_MS, 20 * 60 * 1000),
     updateCommandMaxOutputChars: int(process.env.UPDATE_COMMAND_MAX_OUTPUT_CHARS, 12000)
   },

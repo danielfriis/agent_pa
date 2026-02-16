@@ -143,7 +143,7 @@ When SMS is enabled, `/channels/sms/inbound` can be kept public with
 `SMS_INCLUDE_SEQUENCE_LABELS=true` (default) prefixes multipart SMS replies with `[n/N]` labels so out-of-order delivery is still readable.
 Set `SMS_REPLY_MESSAGE_DELAY_MS` (for example `250`) to send multipart replies one chunk at a time with small pacing delays (applies when `SMS_TWILIO_VALIDATE_SIGNATURE=true`).
 Shared chat update commands are enabled by default and run `deploy/update-server.sh`.
-Tune with `UPDATE_COMMAND_ENABLED`, `UPDATE_SCRIPT_PATH`, `UPDATE_COMMAND_TIMEOUT_MS`, and
+Tune with `UPDATE_COMMAND_ENABLED`, `UPDATE_SCRIPT_PATH`, `UPDATE_STATUS_FILE`, `UPDATE_COMMAND_TIMEOUT_MS`, and
 `UPDATE_COMMAND_MAX_OUTPUT_CHARS`.
 
 Start modes:
