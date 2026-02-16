@@ -121,7 +121,7 @@ export const config = {
       ),
       allowUnauthenticatedInbound: bool(process.env.SMS_ALLOW_UNAUTHENTICATED_INBOUND, true),
       maxReplyChars: int(process.env.SMS_MAX_REPLY_CHARS, 320),
-      includeSequenceLabels: bool(process.env.SMS_INCLUDE_SEQUENCE_LABELS, false),
+      includeSequenceLabels: bool(process.env.SMS_INCLUDE_SEQUENCE_LABELS, true),
       replyMessageDelayMs: int(process.env.SMS_REPLY_MESSAGE_DELAY_MS, 0),
       defaultSystemPrompt:
         process.env.SMS_DEFAULT_SYSTEM_PROMPT ||

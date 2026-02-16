@@ -140,7 +140,7 @@ API auth defaults to off. If `APP_API_TOKEN` is set, auth is enabled automatical
 `GET /health` remains public by default; set `APP_ALLOW_UNAUTHENTICATED_HEALTH=false` to protect it.
 When SMS is enabled, `/channels/sms/inbound` can be kept public with
 `SMS_ALLOW_UNAUTHENTICATED_INBOUND=true` and protected with provider signature verification.
-`SMS_INCLUDE_SEQUENCE_LABELS=false` (default) keeps multipart SMS replies label-free.
+`SMS_INCLUDE_SEQUENCE_LABELS=true` (default) prefixes multipart SMS replies with `[n/N]` labels so out-of-order delivery is still readable.
 Set `SMS_REPLY_MESSAGE_DELAY_MS` (for example `250`) to send multipart replies one chunk at a time with small pacing delays (applies when `SMS_TWILIO_VALIDATE_SIGNATURE=true`).
 
 Start modes:
@@ -192,7 +192,7 @@ SMS_ALLOW_UNAUTHENTICATED_INBOUND=true
 # Max chars per outbound SMS message. Longer assistant replies are split across multiple messages.
 SMS_MAX_REPLY_CHARS=320
 # Optional: prefix multipart SMS chunks with [1/N], [2/N], ... for visible ordering hints.
-SMS_INCLUDE_SEQUENCE_LABELS=false
+SMS_INCLUDE_SEQUENCE_LABELS=true
 # Optional: when >0, send multipart replies via Twilio API with this delay between chunks (ms).
 # Requires SMS_TWILIO_VALIDATE_SIGNATURE=true.
 SMS_REPLY_MESSAGE_DELAY_MS=0

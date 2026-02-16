@@ -34,7 +34,7 @@ const createSmsConfig = (overrides = {}) => ({
       inboundPath: "/channels/sms/inbound",
       allowUnauthenticatedInbound: true,
       maxReplyChars: 320,
-      includeSequenceLabels: false,
+      includeSequenceLabels: true,
       replyMessageDelayMs: 0,
       defaultSystemPrompt: "Reply as SMS.",
       unauthorizedReply: "This phone number is not authorized to use this SMS channel.",
@@ -325,7 +325,7 @@ test("sms channel validates Twilio webhook signatures when enabled", async () =>
   assert.equal(invalid.status, 403);
 });
 
-test("sms channel splits long assistant replies into multiple Twilio messages without sequence labels by default", async () => {
+test("sms channel splits long assistant replies into multiple Twilio messages with sequence labels by default", async () => {
   const sessionStore = createMockSessionStore();
   const longReply =
     "one two three four five six seven eight nine ten eleven twelve thirteen fourteen";
@@ -352,12 +352,13 @@ test("sms channel splits long assistant replies into multiple Twilio messages wi
   assert.ok(messages.length > 1);
   for (const message of messages) {
     assert.ok(message.length <= maxReplyChars);
-    assert.doesNotMatch(message, /^\[\d+\/\d+\]\s/);
+    assert.match(message, /^\[\d+\/\d+\]\s/);
   }
-  assert.equal(normalizeWhitespace(messages.join(" ")), normalizeWhitespace(longReply));
+  const textWithoutLabels = messages.map(stripSequenceLabel).join(" ");
+  assert.equal(normalizeWhitespace(textWithoutLabels), normalizeWhitespace(longReply));
 });
 
-test("sms channel can include sequence labels when enabled", async () => {
+test("sms channel can disable sequence labels when configured", async () => {
   const sessionStore = createMockSessionStore();
   const longReply =
     "one two three four five six seven eight nine ten eleven twelve thirteen fourteen";
@@ -369,7 +370,7 @@ test("sms channel can include sequence labels when enabled", async () => {
   const service = createSmsChannelService({
     agentService,
     sessionStore,
-    config: createSmsConfig({ maxReplyChars, includeSequenceLabels: true })
+    config: createSmsConfig({ maxReplyChars, includeSequenceLabels: false })
   });
 
   const result = await service.handleInboundWebhook({
@@ -384,10 +385,9 @@ test("sms channel can include sequence labels when enabled", async () => {
   assert.ok(messages.length > 1);
   for (const message of messages) {
     assert.ok(message.length <= maxReplyChars);
-    assert.match(message, /^\[\d+\/\d+\]\s/);
+    assert.doesNotMatch(message, /^\[\d+\/\d+\]\s/);
   }
-  const textWithoutLabels = messages.map(stripSequenceLabel).join(" ");
-  assert.equal(normalizeWhitespace(textWithoutLabels), normalizeWhitespace(longReply));
+  assert.equal(normalizeWhitespace(messages.join(" ")), normalizeWhitespace(longReply));
 });
 
 test("sms channel normalizes markdown-heavy assistant replies for plain SMS text", async () => {
