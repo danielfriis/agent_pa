@@ -178,6 +178,8 @@ SMS_ALLOW_UNAUTHENTICATED_INBOUND=true
 SMS_MAX_REPLY_CHARS=320
 # Optional override. Keep the "tools and skills remain available" guidance unless intentionally changing behavior.
 # SMS_DEFAULT_SYSTEM_PROMPT=You are replying to a user over SMS. Access to all tools and skills remains available; SMS only changes response formatting. Respond with plain text only and keep it concise.
+# Optional canned reply for sender numbers that are not allowed.
+# SMS_UNAUTHORIZED_REPLY=This phone number is not authorized to use this SMS channel.
 SMS_TWILIO_AUTH_TOKEN=your_twilio_auth_token
 SMS_TWILIO_VALIDATE_SIGNATURE=true
 SMS_TWILIO_WEBHOOK_BASE_URL=https://your-public-host.example
@@ -210,6 +212,12 @@ SMS_TWILIO_AUTH_TOKENS_JSON={"ACxxxxxxxx":"token1","ACyyyyyyyy":"token2"}
 
 ```bash
 SMS_TWILIO_ALLOWED_TO_NUMBERS=+15551234567,+15557654321
+```
+
+6. Optional sender allowlist (only allow inbound from selected sender number(s); all others receive the canned unauthorized reply):
+
+```bash
+SMS_TWILIO_ALLOWED_FROM_NUMBERS=+15550001111
 ```
 
 Troubleshooting:

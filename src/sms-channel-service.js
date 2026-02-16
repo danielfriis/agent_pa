@@ -143,6 +143,10 @@ export const createSmsChannelService = ({ agentService, sessionStore, config }) 
     smsConfig.fallbackReply || "I hit an error processing that. Please try again shortly.",
     smsConfig.maxReplyChars
   );
+  const unauthorizedReplyMessages = splitTextForSmsMessages(
+    smsConfig.unauthorizedReply || "This phone number is not authorized to use this SMS channel.",
+    smsConfig.maxReplyChars
+  );
 
   const handleInboundWebhook = async ({ headers, form, path, queryString }) => {
     if (!smsConfig.enabled) {
@@ -170,6 +174,16 @@ export const createSmsChannelService = ({ agentService, sessionStore, config }) 
         ok: false,
         status: 403,
         error: "Inbound SMS destination number is not allowed."
+      };
+    }
+    if (typeof provider.isAllowedSender === "function" && !provider.isAllowedSender(event.from)) {
+      return {
+        ok: true,
+        status: 200,
+        sessionId: null,
+        conversationKey: null,
+        createdSession: false,
+        response: buildReplyPayload(unauthorizedReplyMessages)
       };
     }
 

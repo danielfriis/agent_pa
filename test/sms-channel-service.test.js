@@ -35,13 +35,15 @@ const createSmsConfig = (overrides = {}) => ({
       allowUnauthenticatedInbound: true,
       maxReplyChars: 320,
       defaultSystemPrompt: "Reply as SMS.",
+      unauthorizedReply: "This phone number is not authorized to use this SMS channel.",
       fallbackReply: "Fallback.",
       twilio: {
         authToken: "",
         authTokensByAccountSid: {},
         validateSignature: false,
         webhookBaseUrl: "",
-        allowedToNumbers: []
+        allowedToNumbers: [],
+        allowedFromNumbers: []
       },
       ...overrides
     }
@@ -138,6 +140,51 @@ test("sms channel rejects inbound messages for destination numbers outside allow
 
   assert.equal(result.ok, false);
   assert.equal(result.status, 403);
+});
+
+test("sms channel returns canned response for sender numbers outside allowlist", async () => {
+  const createdSessions = [];
+  const sentMessages = [];
+  const sessionStore = createMockSessionStore();
+  const agentService = {
+    createSession: async (args) => {
+      createdSessions.push(args);
+      return { id: "ses_1" };
+    },
+    sendUserMessage: async (args) => {
+      sentMessages.push(args);
+      return { assistantText: "Hi" };
+    }
+  };
+  const service = createSmsChannelService({
+    agentService,
+    sessionStore,
+    config: createSmsConfig({
+      unauthorizedReply: "Not allowed.",
+      twilio: {
+        authToken: "",
+        authTokensByAccountSid: {},
+        validateSignature: false,
+        webhookBaseUrl: "",
+        allowedToNumbers: [],
+        allowedFromNumbers: ["+15550000000"]
+      }
+    })
+  });
+
+  const result = await service.handleInboundWebhook({
+    headers: {},
+    form: twilioForm(),
+    path: "/channels/sms/inbound",
+    queryString: ""
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.status, 200);
+  assert.equal(result.sessionId, null);
+  assert.equal(createdSessions.length, 0);
+  assert.equal(sentMessages.length, 0);
+  assert.deepEqual(extractTwilioMessages(result.response.body), ["Not allowed."]);
 });
 
 test("sms channel validates Twilio webhook signatures when enabled", async () => {

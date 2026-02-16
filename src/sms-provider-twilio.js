@@ -51,6 +51,9 @@ export const createTwilioSmsAdapter = (twilioConfig = {}) => {
   const allowedToSet = new Set(
     (twilioConfig.allowedToNumbers || []).map(normalizeEndpoint).filter(Boolean)
   );
+  const allowedFromSet = new Set(
+    (twilioConfig.allowedFromNumbers || []).map(normalizeEndpoint).filter(Boolean)
+  );
 
   const resolveAuthToken = (accountSid) => {
     if (
@@ -132,6 +135,11 @@ export const createTwilioSmsAdapter = (twilioConfig = {}) => {
     return allowedToSet.has(normalizeEndpoint(to));
   };
 
+  const isAllowedSender = (from) => {
+    if (!allowedFromSet.size) return true;
+    return allowedFromSet.has(normalizeEndpoint(from));
+  };
+
   const formatReply = (texts) => {
     const messages = asArray(texts)
       .map((text) => String(text ?? ""))
@@ -147,6 +155,7 @@ export const createTwilioSmsAdapter = (twilioConfig = {}) => {
     parseInbound,
     verifyRequest,
     isAllowedDestination,
+    isAllowedSender,
     formatReply
   };
 };

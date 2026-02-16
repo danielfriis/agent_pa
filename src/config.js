@@ -114,6 +114,9 @@ export const config = {
       defaultSystemPrompt:
         process.env.SMS_DEFAULT_SYSTEM_PROMPT ||
         "You are replying to a user over SMS. Access to all tools and skills remains available; SMS only changes response formatting. Respond with plain text only and keep it concise.",
+      unauthorizedReply:
+        process.env.SMS_UNAUTHORIZED_REPLY ||
+        "This phone number is not authorized to use this SMS channel.",
       fallbackReply:
         process.env.SMS_FALLBACK_REPLY || "I hit an error processing that. Please try again shortly.",
       twilio: {
@@ -124,7 +127,8 @@ export const config = {
           twilioShouldValidateSignaturesByDefault
         ),
         webhookBaseUrl: process.env.SMS_TWILIO_WEBHOOK_BASE_URL || "",
-        allowedToNumbers: csv(process.env.SMS_TWILIO_ALLOWED_TO_NUMBERS)
+        allowedToNumbers: csv(process.env.SMS_TWILIO_ALLOWED_TO_NUMBERS),
+        allowedFromNumbers: csv(process.env.SMS_TWILIO_ALLOWED_FROM_NUMBERS)
       }
     }
   }
