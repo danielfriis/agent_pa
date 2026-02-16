@@ -23,6 +23,7 @@ It automatically:
 6. Writes and reloads Nginx proxy config.
    - Includes long proxy timeouts (`proxy_read_timeout`/`proxy_send_timeout` set to 86400s).
 7. Disables the default Nginx site symlink to avoid route conflicts.
+8. Writes optional session transcript log env vars (disabled by default).
 
 ## Non-interactive mode
 
@@ -66,6 +67,30 @@ Useful options:
 ./deploy/update-server.sh --branch main
 ./deploy/update-server.sh --skip-check
 ./deploy/update-server.sh --skip-deps
+```
+
+## Optional session transcript logs
+
+Enable per-session JSONL logs for debugging across API/terminal/SMS:
+
+```bash
+SESSION_LOG_ENABLED=true
+# Optional:
+# SESSION_LOG_DIR=/path/to/agent_config/session_logs
+# SESSION_LOG_MAX_CHARS=2000
+# SESSION_LOG_INCLUDE_SYSTEM=false
+```
+
+After changing `.env`, restart the service:
+
+```bash
+sudo systemctl restart agent-pa
+```
+
+Each session writes to:
+
+```bash
+<SESSION_LOG_DIR>/<sessionId>.jsonl
 ```
 
 ## Result

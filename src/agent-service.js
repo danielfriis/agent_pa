@@ -38,8 +38,21 @@ const fallbackAssistantText = ({ assistantPartTypes = [], diagnostics = null }) 
 export const createAgentService = ({
   opencodeClient,
   sessionStore,
-  withMemorySystem
+  withMemorySystem,
+  sessionTranscriptLogger = null
 }) => {
+  const appendSessionTranscript = async (entry) => {
+    if (!sessionTranscriptLogger || typeof sessionTranscriptLogger.appendEntry !== "function") return;
+    try {
+      await sessionTranscriptLogger.appendEntry(entry);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      process.stderr.write(
+        `[agent-pa] warning: failed to append session transcript for ${entry.sessionId}: ${detail}\n`
+      );
+    }
+  };
+
   const waitForOpenCode = async (attempts = 20, delayMs = 500) => {
     for (let i = 0; i < attempts; i += 1) {
       try {
@@ -113,59 +126,89 @@ export const createAgentService = ({
     noReply = false,
     agent,
     model,
-    system
+    system,
+    channel
   }) => {
-    let payload = {
-      parts: [{ type: "text", text }],
-      noReply: Boolean(noReply)
-    };
-
-    if (agent) payload.agent = agent;
-    if (isValidModel(model)) {
-      payload.model = {
-        providerID: model.providerID,
-        modelID: model.modelID
+    try {
+      let payload = {
+        parts: [{ type: "text", text }],
+        noReply: Boolean(noReply)
       };
-    }
 
-    payload = await withMemorySystem(payload, system);
+      if (agent) payload.agent = agent;
+      if (isValidModel(model)) {
+        payload.model = {
+          providerID: model.providerID,
+          modelID: model.modelID
+        };
+      }
 
-    const result = await sendMessageWithRecovery(sessionId, payload);
-    let assistantText = extractText(result?.parts || []);
-    let assistantPartTypes = [];
-    let diagnostics = null;
+      payload = await withMemorySystem(payload, system);
 
-    if (!assistantText.trim()) {
-      const historyOutput = await readAssistantReplyFromHistory(opencodeClient, sessionId, text);
-      assistantText = historyOutput.text;
-      assistantPartTypes = historyOutput.partTypes;
-    }
+      const result = await sendMessageWithRecovery(sessionId, payload);
+      let assistantText = extractText(result?.parts || []);
+      let assistantPartTypes = [];
+      let diagnostics = null;
 
-    if (!assistantText.trim() && !assistantPartTypes.length) {
-      const messages = await opencodeClient.listMessages(sessionId);
-      const raw = latestAssistantRaw(messages);
-      diagnostics = {
-        recentMessages: summarizeRecentMessages(messages),
-        latestAssistantInfo: summarizeLatestAssistantInfo(messages),
-        latestAssistantRaw: raw
+      if (!assistantText.trim()) {
+        const historyOutput = await readAssistantReplyFromHistory(opencodeClient, sessionId, text);
+        assistantText = historyOutput.text;
+        assistantPartTypes = historyOutput.partTypes;
+      }
+
+      if (!assistantText.trim() && !assistantPartTypes.length) {
+        const messages = await opencodeClient.listMessages(sessionId);
+        const raw = latestAssistantRaw(messages);
+        diagnostics = {
+          recentMessages: summarizeRecentMessages(messages),
+          latestAssistantInfo: summarizeLatestAssistantInfo(messages),
+          latestAssistantRaw: raw
+        };
+      }
+
+      const assistantTextForUser = assistantText.trim()
+        ? assistantText
+        : fallbackAssistantText({ assistantPartTypes, diagnostics });
+
+      await sessionStore.upsertSession(sessionId, {
+        lastUserMessage: text,
+        lastAssistantMessage: assistantTextForUser,
+        lastMessageAt: new Date().toISOString()
+      });
+
+      await appendSessionTranscript({
+        type: "assistant_response",
+        sessionId,
+        channel: channel || "unknown",
+        userText: text,
+        assistantText: assistantTextForUser,
+        assistantPartTypes,
+        noReply: Boolean(noReply),
+        agent,
+        model: isValidModel(model) ? model : null,
+        system,
+        diagnostics
+      });
+
+      return {
+        assistantText: assistantTextForUser,
+        assistantPartTypes,
+        diagnostics
       };
+    } catch (error) {
+      await appendSessionTranscript({
+        type: "request_error",
+        sessionId,
+        channel: channel || "unknown",
+        userText: text,
+        noReply: Boolean(noReply),
+        agent,
+        model: isValidModel(model) ? model : null,
+        system,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      throw error;
     }
-
-    const assistantTextForUser = assistantText.trim()
-      ? assistantText
-      : fallbackAssistantText({ assistantPartTypes, diagnostics });
-
-    await sessionStore.upsertSession(sessionId, {
-      lastUserMessage: text,
-      lastAssistantMessage: assistantTextForUser,
-      lastMessageAt: new Date().toISOString()
-    });
-
-    return {
-      assistantText: assistantTextForUser,
-      assistantPartTypes,
-      diagnostics
-    };
   };
 
   return {

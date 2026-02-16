@@ -10,6 +10,7 @@ import { createMemorySystemInjector } from "./memory-system.js";
 import { OpenCodeClient } from "./opencode-client.js";
 import { syncOpenCodeConfig, syncOpenCodeSkills } from "./opencode-sync.js";
 import { createRouteHandler } from "./routes.js";
+import { createSessionTranscriptLogger } from "./session-transcript-logger.js";
 import { createSmsChannelService } from "./sms-channel-service.js";
 import { SessionStore } from "./session-store.js";
 import { AgentWorkspace } from "./workspace.js";
@@ -27,11 +28,13 @@ export const main = async () => {
   const opencodeClient = new OpenCodeClient(config.opencode);
   const workspace = new AgentWorkspace(config.agent.configDir, config.memory.maxChars);
   const sessionStore = new SessionStore(config.sessionStore);
+  const sessionTranscriptLogger = createSessionTranscriptLogger(config.sessionLogs);
   const withMemorySystem = createMemorySystemInjector(workspace);
   const agentService = createAgentService({
     opencodeClient,
     sessionStore,
-    withMemorySystem
+    withMemorySystem,
+    sessionTranscriptLogger
   });
   const smsChannelService = createSmsChannelService({
     agentService,
@@ -42,6 +45,11 @@ export const main = async () => {
   await fs.mkdir(config.agent.workspaceDir, { recursive: true });
   await workspace.ensure();
   await sessionStore.ensure();
+  if (sessionTranscriptLogger.enabled) {
+    process.stdout.write(
+      `[agent-pa] session transcript logging enabled (${sessionTranscriptLogger.logsDir})\n`
+    );
+  }
 
   const syncSkills = () =>
     syncOpenCodeSkills({

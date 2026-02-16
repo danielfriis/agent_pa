@@ -241,7 +241,8 @@ test("POST /sessions/:id/message delegates message handling to agentService", as
       noReply: true,
       agent: "default",
       model: { providerID: "openai", modelID: "gpt-4.1" },
-      system: "custom system"
+      system: "custom system",
+      channel: "api"
     }
   ]);
   assert.deepEqual(calls.listMessages, ["ses_1"]);

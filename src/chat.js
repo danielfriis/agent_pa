@@ -199,7 +199,8 @@ export const startTerminalChat = async ({
         const reply = await agentService.sendUserMessage({
           sessionId: session.id,
           text: input,
-          model
+          model,
+          channel: "terminal"
         });
         const assistantText = reply.assistantText;
         const assistantPartTypes = reply.assistantPartTypes;

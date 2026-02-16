@@ -161,6 +161,10 @@ write_env_file() {
   upsert_env "AGENT_WORKSPACE_DIR" "${REPO_DIR}/agent_workspace"
   upsert_env "AGENT_CONFIG_DIR" "${REPO_DIR}/agent_config"
   upsert_env "STORE_DIR" "${REPO_DIR}/agent_config/sessions"
+  upsert_env "SESSION_LOG_ENABLED" "false"
+  upsert_env "SESSION_LOG_DIR" "${REPO_DIR}/agent_config/session_logs"
+  upsert_env "SESSION_LOG_MAX_CHARS" "2000"
+  upsert_env "SESSION_LOG_INCLUDE_SYSTEM" "false"
 
   upsert_env "OPENCODE_SERVER_URL" "http://127.0.0.1:${OPENCODE_PORT}"
   upsert_env "OPENCODE_SERVER_HOST" "127.0.0.1"

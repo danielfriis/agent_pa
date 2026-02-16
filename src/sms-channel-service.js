@@ -13,6 +13,45 @@ const truncateText = (value, maxChars) => {
   return `${text.slice(0, maxChars - 3)}...`;
 };
 
+const normalizeSmsText = (value) => {
+  let text = trimToString(value);
+  if (!text) return "";
+
+  text = text
+    .replace(/\r\n?/g, "\n")
+    .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, "$1 ($2)")
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1 ($2)")
+    .replace(/```([\s\S]*?)```/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/__([^_]+)__/g, "$1")
+    .replace(/(^|[\s(])\*([^*\n]+)\*(?=$|[\s).,!?:;])/g, "$1$2")
+    .replace(/(^|[\s(])_([^_\n]+)_(?=$|[\s).,!?:;])/g, "$1$2")
+    .replace(/[•▪▫◦]/g, "-")
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/[–—]/g, "-")
+    .replace(/→/g, "->")
+    .replace(/\u00a0/g, " ");
+
+  text = text
+    .split("\n")
+    .map((line) =>
+      line
+        .replace(/^\s{0,3}(#{1,6})\s+/, "")
+        .replace(/^\s{0,3}>\s?/, "")
+        .replace(/^\s*[–—]\s+/, "- ")
+    )
+    .join("\n");
+
+  text = text
+    .replace(/^\s*([-*_])\1{2,}\s*$/gm, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+  return text;
+};
+
 const splitTextForSmsMessages = (value, maxChars) => {
   const text = trimToString(value);
   if (!text) return [];
@@ -140,11 +179,13 @@ export const createSmsChannelService = ({ agentService, sessionStore, config }) 
   });
 
   const fallbackReplyMessages = splitTextForSmsMessages(
-    smsConfig.fallbackReply || "I hit an error processing that. Please try again shortly.",
+    normalizeSmsText(smsConfig.fallbackReply || "I hit an error processing that. Please try again shortly."),
     smsConfig.maxReplyChars
   );
   const unauthorizedReplyMessages = splitTextForSmsMessages(
-    smsConfig.unauthorizedReply || "This phone number is not authorized to use this SMS channel.",
+    normalizeSmsText(
+      smsConfig.unauthorizedReply || "This phone number is not authorized to use this SMS channel."
+    ),
     smsConfig.maxReplyChars
   );
 
@@ -217,11 +258,15 @@ export const createSmsChannelService = ({ agentService, sessionStore, config }) 
       const reply = await agentService.sendUserMessage({
         sessionId: session.id,
         text: event.text,
-        system: systemPrompt
+        system: systemPrompt,
+        channel: `sms:${providerName}`
       });
+      const assistantReplyText = normalizeSmsText(
+        reply.assistantText || fallbackReplyMessages.join("\n")
+      );
 
       const assistantReplyMessages = splitTextForSmsMessages(
-        reply.assistantText || fallbackReplyMessages.join("\n"),
+        assistantReplyText || fallbackReplyMessages.join("\n"),
         smsConfig.maxReplyChars
       );
       const assistantText = truncateText(assistantReplyMessages.join("\n"), 5000);

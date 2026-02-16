@@ -130,6 +130,11 @@ By default this app assumes OpenCode server at `http://127.0.0.1:4096`.
 For real model responses, set `OPENAI_API_KEY` in `.env`.
 OpenCode directory defaults to `agent_workspace/` and can be overridden with `OPENCODE_DIRECTORY`.
 Session metadata files default to `agent_config/sessions/` and can be overridden with `STORE_DIR`.
+Per-session transcript logs are optional and disabled by default. Enable with
+`SESSION_LOG_ENABLED=true`; logs are written as JSONL files under
+`agent_config/session_logs/` by default (`SESSION_LOG_DIR` overrides).
+`SESSION_LOG_MAX_CHARS` controls max chars per text field per entry (default `2000`).
+`SESSION_LOG_INCLUDE_SYSTEM=true` includes the injected system prompt in each entry.
 API auth defaults to off. If `APP_API_TOKEN` is set, auth is enabled automatically unless
 `APP_REQUIRE_AUTH=false`. Use `Authorization: Bearer <token>` or `x-api-key: <token>`.
 `GET /health` remains public by default; set `APP_ALLOW_UNAUTHENTICATED_HEALTH=false` to protect it.
@@ -223,8 +228,19 @@ SMS_TWILIO_ALLOWED_TO_NUMBERS=+15551234567,+15557654321
 SMS_TWILIO_ALLOWED_FROM_NUMBERS=+15550001111
 ```
 
+7. Optional per-session transcript logs for debugging all channels (API, terminal, SMS):
+
+```bash
+SESSION_LOG_ENABLED=true
+# Optional overrides:
+# SESSION_LOG_DIR=./agent_config/session_logs
+# SESSION_LOG_MAX_CHARS=2000
+# SESSION_LOG_INCLUDE_SYSTEM=false
+```
+
 Troubleshooting:
 - If `POST http://127.0.0.1:8787/channels/sms/inbound` returns JSON `403` but public URL returns Nginx HTML `404`, Nginx site routing is misconfigured. See `/Users/danielfriis/Code/agent_pa/docs/remote-server-install.md`.
+- When session transcript logging is enabled, inspect `SESSION_LOG_DIR/<sessionId>.jsonl` to compare `assistant_response` entries (raw assistant text at service level) with channel-specific delivery behavior.
 
 ## Remote deployment
 

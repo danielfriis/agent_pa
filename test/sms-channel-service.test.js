@@ -59,8 +59,18 @@ const twilioForm = (overrides = {}) => ({
   ...overrides
 });
 
+const unescapeTwimlText = (value) =>
+  String(value || "")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, "&");
+
 const extractTwilioMessages = (xml) =>
-  [...String(xml || "").matchAll(/<Message>([\s\S]*?)<\/Message>/g)].map((match) => match[1]);
+  [...String(xml || "").matchAll(/<Message>([\s\S]*?)<\/Message>/g)].map((match) =>
+    unescapeTwimlText(match[1])
+  );
 
 const normalizeWhitespace = (value) => String(value || "").replace(/\s+/g, " ").trim();
 
@@ -105,6 +115,7 @@ test("sms channel creates a session then reuses it for same provider/account/to/
   assert.equal(sentMessages.length, 2);
   assert.equal(sentMessages[0].sessionId, "ses_1");
   assert.equal(sentMessages[1].sessionId, "ses_1");
+  assert.equal(sentMessages[0].channel, "sms:twilio");
   assert.match(
     sentMessages[0].system,
     /You still have access to all tools and skills available in this runtime/
@@ -264,4 +275,42 @@ test("sms channel splits long assistant replies into multiple Twilio messages", 
     assert.ok(message.length <= maxReplyChars);
   }
   assert.equal(normalizeWhitespace(messages.join(" ")), normalizeWhitespace(longReply));
+});
+
+test("sms channel normalizes markdown-heavy assistant replies for plain SMS text", async () => {
+  const sessionStore = createMockSessionStore();
+  const richReply = [
+    "# Strap options",
+    "No stall 🙂",
+    "**Models** in stock:",
+    "- [Scandinavian Photo](https://example.com/shop)",
+    "- `Peak Design` cuff",
+    "I'll give you **one specific strap** → right now."
+  ].join("\n");
+  const agentService = {
+    createSession: async () => ({ id: "ses_1" }),
+    sendUserMessage: async () => ({ assistantText: richReply })
+  };
+  const service = createSmsChannelService({
+    agentService,
+    sessionStore,
+    config: createSmsConfig()
+  });
+
+  const result = await service.handleInboundWebhook({
+    headers: {},
+    form: twilioForm(),
+    path: "/channels/sms/inbound",
+    queryString: ""
+  });
+
+  assert.equal(result.ok, true);
+  const combined = extractTwilioMessages(result.response.body).join("\n");
+  assert.ok(!combined.includes("# Strap options"));
+  assert.ok(!combined.includes("**"));
+  assert.ok(!combined.includes("`"));
+  assert.ok(!combined.includes("]("));
+  assert.ok(!combined.includes("→"));
+  assert.match(combined, /Scandinavian Photo \(https:\/\/example\.com\/shop\)/);
+  assert.match(combined, /one specific strap -> right now\./);
 });

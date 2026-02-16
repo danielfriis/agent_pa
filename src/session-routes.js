@@ -35,7 +35,8 @@ export const createSessionRouteHandler = ({ agentService }) => async (req, res, 
       noReply: Boolean(body.noReply),
       agent: body.agent,
       model: body.model,
-      system: typeof body.system === "string" ? body.system : undefined
+      system: typeof body.system === "string" ? body.system : undefined,
+      channel: "api"
     });
 
     const normalized = await agentService.listMessages(sessionId);

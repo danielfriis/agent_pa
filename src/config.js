@@ -92,6 +92,15 @@ export const config = {
   sessionStore: {
     sessionsDir: path.resolve(process.env.STORE_DIR || path.resolve(agentConfigDir, "sessions"))
   },
+  sessionLogs: {
+    enabled: bool(process.env.SESSION_LOG_ENABLED, false),
+    logsDir: resolveDir(
+      process.env.SESSION_LOG_DIR,
+      path.resolve(agentConfigDir, "session_logs")
+    ),
+    maxEntryChars: int(process.env.SESSION_LOG_MAX_CHARS, 2000),
+    includeSystem: bool(process.env.SESSION_LOG_INCLUDE_SYSTEM, false)
+  },
   opencode: {
     baseUrl: process.env.OPENCODE_SERVER_URL || "http://127.0.0.1:4096",
     host: process.env.OPENCODE_SERVER_HOST || "127.0.0.1",

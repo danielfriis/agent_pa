@@ -126,3 +126,80 @@ test("sendUserMessage returns fallback text for non-text assistant outputs", asy
     "Completed with non-text output (tool-call). Ask me to summarize what I did."
   );
 });
+
+test("sendUserMessage appends per-session transcript entries when logger is configured", async () => {
+  const transcriptEntries = [];
+
+  const service = createAgentService({
+    opencodeClient: {
+      health: async () => ({ ok: true }),
+      sendMessage: async () => ({
+        parts: [{ type: "text", text: "world" }]
+      }),
+      listMessages: async () => []
+    },
+    sessionStore: {
+      upsertSession: async () => {}
+    },
+    withMemorySystem: passthroughMemory,
+    sessionTranscriptLogger: {
+      appendEntry: async (entry) => {
+        transcriptEntries.push(entry);
+      }
+    }
+  });
+
+  const result = await service.sendUserMessage({
+    sessionId: "ses_1",
+    text: "hello",
+    channel: "api",
+    model: { providerID: "openai", modelID: "gpt-5-mini" }
+  });
+
+  assert.equal(result.assistantText, "world");
+  assert.equal(transcriptEntries.length, 1);
+  assert.equal(transcriptEntries[0].type, "assistant_response");
+  assert.equal(transcriptEntries[0].sessionId, "ses_1");
+  assert.equal(transcriptEntries[0].channel, "api");
+  assert.equal(transcriptEntries[0].userText, "hello");
+  assert.equal(transcriptEntries[0].assistantText, "world");
+});
+
+test("sendUserMessage logs request errors and still throws the original error", async () => {
+  const transcriptEntries = [];
+
+  const service = createAgentService({
+    opencodeClient: {
+      health: async () => ({ ok: true }),
+      sendMessage: async () => {
+        throw new Error("OpenCode POST /session/ses_1/message failed: 500 boom");
+      },
+      listMessages: async () => []
+    },
+    sessionStore: {
+      upsertSession: async () => {}
+    },
+    withMemorySystem: passthroughMemory,
+    sessionTranscriptLogger: {
+      appendEntry: async (entry) => {
+        transcriptEntries.push(entry);
+      }
+    }
+  });
+
+  await assert.rejects(
+    service.sendUserMessage({
+      sessionId: "ses_1",
+      text: "hello",
+      channel: "api"
+    }),
+    /500 boom/
+  );
+
+  assert.equal(transcriptEntries.length, 1);
+  assert.equal(transcriptEntries[0].type, "request_error");
+  assert.equal(transcriptEntries[0].sessionId, "ses_1");
+  assert.equal(transcriptEntries[0].channel, "api");
+  assert.equal(transcriptEntries[0].userText, "hello");
+  assert.match(transcriptEntries[0].error, /500 boom/);
+});
