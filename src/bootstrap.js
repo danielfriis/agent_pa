@@ -13,6 +13,7 @@ import { createRouteHandler } from "./routes.js";
 import { createSessionTranscriptLogger } from "./session-transcript-logger.js";
 import { createSmsChannelService } from "./sms-channel-service.js";
 import { SessionStore } from "./session-store.js";
+import { createUpdateCommandService } from "./update-command-service.js";
 import { AgentWorkspace } from "./workspace.js";
 
 export const main = async () => {
@@ -36,10 +37,17 @@ export const main = async () => {
     withMemorySystem,
     sessionTranscriptLogger
   });
+  const updateCommandService = createUpdateCommandService({
+    enabled: config.maintenance.updateCommandEnabled,
+    scriptPath: config.maintenance.updateScriptPath,
+    timeoutMs: config.maintenance.updateCommandTimeoutMs,
+    maxOutputChars: config.maintenance.updateCommandMaxOutputChars
+  });
   const smsChannelService = createSmsChannelService({
     agentService,
     sessionStore,
-    config
+    config,
+    updateCommandService
   });
 
   await fs.mkdir(config.agent.workspaceDir, { recursive: true });
@@ -76,7 +84,8 @@ export const main = async () => {
     workspace,
     config,
     agentService,
-    smsChannelService
+    smsChannelService,
+    updateCommandService
   });
 
   const server = http.createServer((req, res) => {
@@ -110,7 +119,8 @@ export const main = async () => {
       agentService,
       workspace,
       shutdown,
-      syncSkills
+      syncSkills,
+      updateCommandService
     });
   }
 };

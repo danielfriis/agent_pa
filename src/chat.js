@@ -5,6 +5,10 @@ import {
   parseSharedChatCommand,
   sharedChatCommandHelpLines
 } from "./shared-chat-commands.js";
+import {
+  formatUpdateStartText,
+  formatUpdateStatusText
+} from "./update-command-service.js";
 
 const parseChatModel = (raw) => {
   if (!raw || typeof raw !== "string") return null;
@@ -17,7 +21,8 @@ export const startTerminalChat = async ({
   agentService,
   workspace,
   shutdown,
-  syncSkills
+  syncSkills,
+  updateCommandService
 }) => {
   const ready = await agentService.waitForOpenCode();
   if (!ready) {
@@ -41,6 +46,16 @@ export const startTerminalChat = async ({
 
   let busy = false;
   let closed = false;
+  const updates = updateCommandService || {
+    startUpdate: async () => ({
+      ok: false,
+      error: "Update command service is unavailable."
+    }),
+    getStatus: async () => ({
+      ok: false,
+      error: "Update command service is unavailable."
+    })
+  };
   const prompt = () => {
     if (closed) return;
     rl.setPrompt("you> ");
@@ -102,6 +117,51 @@ export const startTerminalChat = async ({
           } catch (error) {
             process.stdout.write(
               `[chat] Failed to create session: ${
+                error instanceof Error ? error.message : String(error)
+              }\n`
+            );
+          } finally {
+            busy = false;
+            prompt();
+          }
+        })();
+        return;
+      }
+
+      if (sharedCommand.name === "update") {
+        busy = true;
+        void (async () => {
+          try {
+            const outcome = await updates.startUpdate({
+              argsText: sharedCommand.argsText,
+              channel: "terminal"
+            });
+            process.stdout.write(`[chat] ${formatUpdateStartText(outcome).replaceAll("\n", "\n[chat] ")}\n`);
+          } catch (error) {
+            process.stdout.write(
+              `[chat] Failed to start update: ${
+                error instanceof Error ? error.message : String(error)
+              }\n`
+            );
+          } finally {
+            busy = false;
+            prompt();
+          }
+        })();
+        return;
+      }
+
+      if (sharedCommand.name === "update-status") {
+        busy = true;
+        void (async () => {
+          try {
+            const status = await updates.getStatus();
+            process.stdout.write(
+              `[chat] ${formatUpdateStatusText(status).replaceAll("\n", "\n[chat] ")}\n`
+            );
+          } catch (error) {
+            process.stdout.write(
+              `[chat] Failed to read update status: ${
                 error instanceof Error ? error.message : String(error)
               }\n`
             );

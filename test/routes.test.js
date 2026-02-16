@@ -56,7 +56,9 @@ const buildRoute = (overrides = {}) => {
     listMessages: [],
     appendMemory: [],
     writeSystemPrompt: [],
-    smsInbound: []
+    smsInbound: [],
+    startUpdate: [],
+    getUpdateStatus: 0
   };
 
   const opencodeClient = {
@@ -173,13 +175,54 @@ const buildRoute = (overrides = {}) => {
     ...overrides.smsChannelService
   };
 
+  const updateCommandService = {
+    isEnabled: () => true,
+    scriptPath: () => "/tmp/update-server.sh",
+    startUpdate: async (args) => {
+      calls.startUpdate.push(args);
+      return {
+        ok: true,
+        code: "started",
+        run: {
+          id: "upd_1",
+          args: [],
+          startedAt: "2026-01-01T00:00:00.000Z"
+        }
+      };
+    },
+    getStatus: async () => {
+      calls.getUpdateStatus += 1;
+      return {
+        ok: true,
+        running: false,
+        currentRun: null,
+        lastRun: {
+          id: "upd_1",
+          status: "succeeded",
+          args: [],
+          startedAt: "2026-01-01T00:00:00.000Z",
+          completedAt: "2026-01-01T00:00:02.000Z",
+          durationMs: 2000,
+          exitCode: 0,
+          signal: null,
+          timedOut: false,
+          error: "",
+          stdout: "ok",
+          stderr: ""
+        }
+      };
+    },
+    ...overrides.updateCommandService
+  };
+
   const route = createRouteHandler({
     opencodeClient,
     sessionStore,
     workspace,
     config,
     agentService,
-    smsChannelService
+    smsChannelService,
+    updateCommandService
   });
 
   return { route, calls };
@@ -295,6 +338,41 @@ test("POST /sessions/:id/message handles /session-new and returns the created se
   assert.equal(response.json.sessionId, "ses_2");
   assert.equal(response.json.assistant.text, "Started new session: ses_2");
   assert.deepEqual(response.json.messages, []);
+});
+
+test("POST /sessions/:id/message handles /update and starts update command service", async () => {
+  const { route, calls } = buildRoute();
+  const response = await invoke(route, {
+    method: "POST",
+    url: "/sessions/ses_1/message",
+    body: { text: "/update --branch main --skip-check" }
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(calls.sendUserMessage, []);
+  assert.deepEqual(calls.startUpdate, [
+    {
+      argsText: "--branch main --skip-check",
+      channel: "api"
+    }
+  ]);
+  assert.deepEqual(calls.listMessages, ["ses_1"]);
+  assert.equal(response.json.assistant.text.includes("Update started"), true);
+});
+
+test("POST /sessions/:id/message handles /update-status and returns update status", async () => {
+  const { route, calls } = buildRoute();
+  const response = await invoke(route, {
+    method: "POST",
+    url: "/sessions/ses_1/message",
+    body: { text: "/update-status" }
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(calls.sendUserMessage, []);
+  assert.equal(calls.getUpdateStatus, 1);
+  assert.deepEqual(calls.listMessages, ["ses_1"]);
+  assert.equal(response.json.assistant.text.includes("Last update"), true);
 });
 
 test("POST /sessions/:id/message prefers fallback text when latest assistant message is empty", async () => {

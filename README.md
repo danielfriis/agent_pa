@@ -142,6 +142,9 @@ When SMS is enabled, `/channels/sms/inbound` can be kept public with
 `SMS_ALLOW_UNAUTHENTICATED_INBOUND=true` and protected with provider signature verification.
 `SMS_INCLUDE_SEQUENCE_LABELS=true` (default) prefixes multipart SMS replies with `[n/N]` labels so out-of-order delivery is still readable.
 Set `SMS_REPLY_MESSAGE_DELAY_MS` (for example `250`) to send multipart replies one chunk at a time with small pacing delays (applies when `SMS_TWILIO_VALIDATE_SIGNATURE=true`).
+Shared chat update commands are enabled by default and run `deploy/update-server.sh`.
+Tune with `UPDATE_COMMAND_ENABLED`, `UPDATE_SCRIPT_PATH`, `UPDATE_COMMAND_TIMEOUT_MS`, and
+`UPDATE_COMMAND_MAX_OUTPUT_CHARS`.
 
 Start modes:
 - `npm run start:server` starts only the HTTP server so channel clients can connect.
@@ -159,6 +162,8 @@ Commands:
 - `/session-new [title]`
 - `/model providerID/modelID`
 - `/session`
+- `/update [--branch NAME] [--remote NAME] [--skip-deps] [--skip-check]`
+- `/update-status`
 - `/workspace`
 - `/memory`
 - `/remember TEXT`
@@ -170,6 +175,11 @@ Shared chat commands (available in terminal chat, SMS inbound messages, and `POS
 - `/help`
 - `/session`
 - `/session-new [title]`
+- `/update [--branch NAME] [--remote NAME] [--skip-deps] [--skip-check]`
+- `/update-status`
+
+`/update` starts `deploy/update-server.sh` in the background and returns immediately.
+Use `/update-status` to inspect the active run or the last completed run output.
 
 Memory is automatically injected as system context from `agent_config/memory/memory.md` for each prompt.
 All markdown files in `agent_config/system/` are loaded in filename order and prepended to each prompt. `POST /state/system` writes to `agent_config/system/system-prompt.md`.

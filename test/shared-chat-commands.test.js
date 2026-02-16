@@ -20,6 +20,15 @@ test("parseSharedChatCommand parses shared slash commands", () => {
     name: "session-new",
     title: "Sprint planning"
   });
+  assert.deepEqual(parseSharedChatCommand("/update --branch main --skip-check"), {
+    isCommand: true,
+    name: "update",
+    argsText: "--branch main --skip-check"
+  });
+  assert.deepEqual(parseSharedChatCommand("/update-status"), {
+    isCommand: true,
+    name: "update-status"
+  });
 });
 
 test("parseSharedChatCommand ignores unrelated or malformed commands", () => {
@@ -30,4 +39,5 @@ test("parseSharedChatCommand ignores unrelated or malformed commands", () => {
 
 test("sharedChatCommandHelpText lists session-new command", () => {
   assert.match(sharedChatCommandHelpText(), /\/session-new \[title\]/);
+  assert.match(sharedChatCommandHelpText(), /\/update-status/);
 });

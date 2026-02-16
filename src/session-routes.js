@@ -3,6 +3,10 @@ import {
   parseSharedChatCommand,
   sharedChatCommandHelpText
 } from "./shared-chat-commands.js";
+import {
+  formatUpdateStartText,
+  formatUpdateStatusText
+} from "./update-command-service.js";
 
 const latestAssistantMessage = (messages) =>
   [...messages].reverse().find((message) => message.role === "assistant") || null;
@@ -14,31 +18,43 @@ const buildCommandAssistant = (text) => ({
   text
 });
 
-export const createSessionRouteHandler = ({ agentService }) => async (req, res, path) => {
-  if (req.method === "GET" && path === "/sessions") {
-    const listing = await agentService.listSessions();
-    sendJson(res, 200, listing);
-    return true;
-  }
+export const createSessionRouteHandler = ({ agentService, updateCommandService }) => {
+  const updates = updateCommandService || {
+    startUpdate: async () => ({
+      ok: false,
+      error: "Update command service is unavailable."
+    }),
+    getStatus: async () => ({
+      ok: false,
+      error: "Update command service is unavailable."
+    })
+  };
 
-  if (req.method === "POST" && path === "/sessions") {
-    const body = await readJsonBody(req);
-    const created = await agentService.createSession({
-      title: typeof body.title === "string" ? body.title : undefined,
-      channel: typeof body.channel === "string" && body.channel ? body.channel : "api"
-    });
-    sendJson(res, 201, { session: created });
-    return true;
-  }
-
-  const messagePath = path.match(/^\/sessions\/([^/]+)\/message$/);
-  if (req.method === "POST" && messagePath) {
-    const sessionId = messagePath[1];
-    const body = await readJsonBody(req);
-    if (typeof body.text !== "string" || !body.text.trim()) {
-      sendJson(res, 400, { error: "Body must include string field `text`." });
+  return async (req, res, path) => {
+    if (req.method === "GET" && path === "/sessions") {
+      const listing = await agentService.listSessions();
+      sendJson(res, 200, listing);
       return true;
     }
+
+    if (req.method === "POST" && path === "/sessions") {
+      const body = await readJsonBody(req);
+      const created = await agentService.createSession({
+        title: typeof body.title === "string" ? body.title : undefined,
+        channel: typeof body.channel === "string" && body.channel ? body.channel : "api"
+      });
+      sendJson(res, 201, { session: created });
+      return true;
+    }
+
+    const messagePath = path.match(/^\/sessions\/([^/]+)\/message$/);
+    if (req.method === "POST" && messagePath) {
+      const sessionId = messagePath[1];
+      const body = await readJsonBody(req);
+      if (typeof body.text !== "string" || !body.text.trim()) {
+        sendJson(res, 400, { error: "Body must include string field `text`." });
+        return true;
+      }
 
     const command = parseSharedChatCommand(body.text);
     if (command.isCommand) {
@@ -81,49 +97,79 @@ export const createSessionRouteHandler = ({ agentService }) => async (req, res, 
         });
         return true;
       }
+
+      if (command.name === "update") {
+        const messages = await agentService.listMessages(sessionId);
+        const outcome = await updates.startUpdate({
+          argsText: command.argsText,
+          channel: "api"
+        });
+        sendJson(res, 200, {
+          sessionId,
+          assistant: buildCommandAssistant(formatUpdateStartText(outcome)),
+          assistantPartTypes: [],
+          diagnostics: null,
+          messages
+        });
+        return true;
+      }
+
+      if (command.name === "update-status") {
+        const messages = await agentService.listMessages(sessionId);
+        const status = await updates.getStatus();
+        sendJson(res, 200, {
+          sessionId,
+          assistant: buildCommandAssistant(formatUpdateStatusText(status)),
+          assistantPartTypes: [],
+          diagnostics: null,
+          messages
+        });
+        return true;
+      }
     }
 
-    const reply = await agentService.sendUserMessage({
-      sessionId,
-      text: body.text,
-      noReply: Boolean(body.noReply),
-      agent: body.agent,
-      model: body.model,
-      system: typeof body.system === "string" ? body.system : undefined,
-      channel: "api"
-    });
+      const reply = await agentService.sendUserMessage({
+        sessionId,
+        text: body.text,
+        noReply: Boolean(body.noReply),
+        agent: body.agent,
+        model: body.model,
+        system: typeof body.system === "string" ? body.system : undefined,
+        channel: "api"
+      });
 
-    const normalized = await agentService.listMessages(sessionId);
-    const latest = latestAssistantMessage(normalized);
-    const latestHasText = Boolean(latest?.text && latest.text.trim());
-    const assistant = latestHasText
-      ? latest
-      : reply.assistantText
-        ? {
-            id: latest?.id || null,
-            role: "assistant",
-            time: latest?.time || null,
-            text: reply.assistantText
-          }
-        : latest || null;
+      const normalized = await agentService.listMessages(sessionId);
+      const latest = latestAssistantMessage(normalized);
+      const latestHasText = Boolean(latest?.text && latest.text.trim());
+      const assistant = latestHasText
+        ? latest
+        : reply.assistantText
+          ? {
+              id: latest?.id || null,
+              role: "assistant",
+              time: latest?.time || null,
+              text: reply.assistantText
+            }
+          : latest || null;
 
-    sendJson(res, 200, {
-      sessionId,
-      assistant,
-      assistantPartTypes: reply.assistantPartTypes,
-      diagnostics: reply.diagnostics,
-      messages: normalized
-    });
-    return true;
-  }
+      sendJson(res, 200, {
+        sessionId,
+        assistant,
+        assistantPartTypes: reply.assistantPartTypes,
+        diagnostics: reply.diagnostics,
+        messages: normalized
+      });
+      return true;
+    }
 
-  const getMessagePath = path.match(/^\/sessions\/([^/]+)\/messages$/);
-  if (req.method === "GET" && getMessagePath) {
-    const sessionId = getMessagePath[1];
-    const messages = await agentService.listMessages(sessionId);
-    sendJson(res, 200, { sessionId, messages });
-    return true;
-  }
+    const getMessagePath = path.match(/^\/sessions\/([^/]+)\/messages$/);
+    if (req.method === "GET" && getMessagePath) {
+      const sessionId = getMessagePath[1];
+      const messages = await agentService.listMessages(sessionId);
+      sendJson(res, 200, { sessionId, messages });
+      return true;
+    }
 
-  return false;
+    return false;
+  };
 };

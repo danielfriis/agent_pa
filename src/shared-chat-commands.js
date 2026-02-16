@@ -1,6 +1,8 @@
 const HELP_COMMAND = "/help";
 const SESSION_COMMAND = "/session";
 const SESSION_NEW_COMMAND = "/session-new";
+const UPDATE_COMMAND = "/update";
+const UPDATE_STATUS_COMMAND = "/update-status";
 
 const hasCommandBoundary = (value, command) => {
   const boundary = value.charAt(command.length);
@@ -31,13 +33,30 @@ export const parseSharedChatCommand = (value) => {
     };
   }
 
+  if (
+    trimmed.startsWith(UPDATE_COMMAND) &&
+    hasCommandBoundary(trimmed, UPDATE_COMMAND)
+  ) {
+    return {
+      isCommand: true,
+      name: "update",
+      argsText: trimmed.slice(UPDATE_COMMAND.length).trim()
+    };
+  }
+
+  if (trimmed === UPDATE_STATUS_COMMAND) {
+    return { isCommand: true, name: "update-status" };
+  }
+
   return { isCommand: false };
 };
 
 export const sharedChatCommandHelpLines = () => [
   "/help  show chat commands",
   "/session  show current session id",
-  "/session-new [title]  start a new session"
+  "/session-new [title]  start a new session",
+  "/update [--branch NAME] [--remote NAME] [--skip-deps] [--skip-check]  start update script",
+  "/update-status  show current/last update status"
 ];
 
 export const sharedChatCommandHelpText = () => sharedChatCommandHelpLines().join("\n");

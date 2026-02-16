@@ -203,6 +203,114 @@ test("sms channel /session-new creates a new session and rebinds later messages"
   ]);
 });
 
+test("sms channel /update starts update command without invoking agent message flow", async () => {
+  const startUpdateCalls = [];
+  const sendUserMessageCalls = [];
+  const sessionStore = createMockSessionStore();
+  const agentService = {
+    createSession: async () => ({ id: "ses_1" }),
+    sendUserMessage: async (args) => {
+      sendUserMessageCalls.push(args);
+      return { assistantText: "ok" };
+    }
+  };
+  const service = createSmsChannelService({
+    agentService,
+    sessionStore,
+    config: createSmsConfig(),
+    updateCommandService: {
+      startUpdate: async (args) => {
+        startUpdateCalls.push(args);
+        return {
+          ok: true,
+          code: "started",
+          run: {
+            id: "upd_1",
+            args: ["--skip-check"],
+            startedAt: "2026-01-01T00:00:00.000Z"
+          }
+        };
+      },
+      getStatus: async () => ({
+        ok: true,
+        running: false,
+        currentRun: null,
+        lastRun: null
+      })
+    }
+  });
+
+  const result = await service.handleInboundWebhook({
+    headers: {},
+    form: twilioForm({ Body: "/update --skip-check" }),
+    path: "/channels/sms/inbound",
+    queryString: ""
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.sessionId, null);
+  assert.equal(sendUserMessageCalls.length, 0);
+  assert.deepEqual(startUpdateCalls, [
+    {
+      argsText: "--skip-check",
+      channel: "sms:twilio",
+      requestedBy: "+15550001111"
+    }
+  ]);
+  assert.equal(extractTwilioMessages(result.response.body)[0].includes("Update started"), true);
+});
+
+test("sms channel /update-status returns current update status text", async () => {
+  const statusCalls = [];
+  const sessionStore = createMockSessionStore();
+  const agentService = {
+    createSession: async () => ({ id: "ses_1" }),
+    sendUserMessage: async () => ({ assistantText: "ok" })
+  };
+  const service = createSmsChannelService({
+    agentService,
+    sessionStore,
+    config: createSmsConfig(),
+    updateCommandService: {
+      startUpdate: async () => ({ ok: true, code: "started", run: { id: "upd_1", args: [] } }),
+      getStatus: async () => {
+        statusCalls.push(true);
+        return {
+          ok: true,
+          running: false,
+          currentRun: null,
+          lastRun: {
+            id: "upd_1",
+            status: "succeeded",
+            args: [],
+            startedAt: "2026-01-01T00:00:00.000Z",
+            completedAt: "2026-01-01T00:00:01.000Z",
+            durationMs: 1000,
+            exitCode: 0,
+            signal: null,
+            timedOut: false,
+            error: "",
+            stdout: "done",
+            stderr: ""
+          }
+        };
+      }
+    }
+  });
+
+  const result = await service.handleInboundWebhook({
+    headers: {},
+    form: twilioForm({ Body: "/update-status" }),
+    path: "/channels/sms/inbound",
+    queryString: ""
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.sessionId, null);
+  assert.equal(statusCalls.length, 1);
+  assert.equal(extractTwilioMessages(result.response.body)[0].includes("Last update"), true);
+});
+
 test("sms channel rejects inbound messages for destination numbers outside allowlist", async () => {
   const sessionStore = createMockSessionStore();
   const agentService = {

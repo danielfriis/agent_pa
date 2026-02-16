@@ -111,6 +111,15 @@ export const config = {
     autostart: bool(process.env.AUTOSTART_OPENCODE, true),
     requestTimeoutMs: int(process.env.OPENCODE_REQUEST_TIMEOUT_MS, 0)
   },
+  maintenance: {
+    updateCommandEnabled: bool(process.env.UPDATE_COMMAND_ENABLED, true),
+    updateScriptPath: resolveDir(
+      process.env.UPDATE_SCRIPT_PATH,
+      path.resolve(process.cwd(), "deploy/update-server.sh")
+    ),
+    updateCommandTimeoutMs: int(process.env.UPDATE_COMMAND_TIMEOUT_MS, 20 * 60 * 1000),
+    updateCommandMaxOutputChars: int(process.env.UPDATE_COMMAND_MAX_OUTPUT_CHARS, 12000)
+  },
   channels: {
     sms: {
       enabled: bool(process.env.SMS_ENABLED, false),

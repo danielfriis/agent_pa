@@ -7,6 +7,10 @@ import {
   parseSharedChatCommand,
   sharedChatCommandHelpText
 } from "./shared-chat-commands.js";
+import {
+  formatUpdateStartText,
+  formatUpdateStatusText
+} from "./update-command-service.js";
 
 const trimToString = (value) => String(value || "").trim();
 const toNonNegativeInt = (value, fallback = 0) => {
@@ -222,7 +226,22 @@ const buildSmsSystemPrompt = ({ defaultPrompt, event, maxReplyChars }) =>
     .filter(Boolean)
     .join("\n");
 
-export const createSmsChannelService = ({ agentService, sessionStore, config }) => {
+export const createSmsChannelService = ({
+  agentService,
+  sessionStore,
+  config,
+  updateCommandService
+}) => {
+  const updates = updateCommandService || {
+    startUpdate: async () => ({
+      ok: false,
+      error: "Update command service is unavailable."
+    }),
+    getStatus: async () => ({
+      ok: false,
+      error: "Update command service is unavailable."
+    })
+  };
   const smsConfig = config.channels?.sms || {};
 
   const providerName = trimToString(smsConfig.provider || "twilio").toLowerCase();
@@ -438,6 +457,42 @@ export const createSmsChannelService = ({ agentService, sessionStore, config }) 
               sessionId: created.id,
               conversationKey,
               createdSession: true,
+              response: await buildReplyPayload({
+                event,
+                messages: replyMessages
+              })
+            };
+          }
+
+          if (command.name === "update") {
+            const outcome = await updates.startUpdate({
+              argsText: command.argsText,
+              channel: `sms:${providerName}`,
+              requestedBy: event.from
+            });
+            const replyMessages = toReplyMessages(formatUpdateStartText(outcome));
+            return {
+              ok: true,
+              status: 200,
+              sessionId: null,
+              conversationKey,
+              createdSession: false,
+              response: await buildReplyPayload({
+                event,
+                messages: replyMessages
+              })
+            };
+          }
+
+          if (command.name === "update-status") {
+            const status = await updates.getStatus();
+            const replyMessages = toReplyMessages(formatUpdateStatusText(status));
+            return {
+              ok: true,
+              status: 200,
+              sessionId: null,
+              conversationKey,
+              createdSession: false,
               response: await buildReplyPayload({
                 event,
                 messages: replyMessages

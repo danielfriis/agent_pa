@@ -18,9 +18,13 @@ export const createRouteHandler = ({
   workspace,
   config,
   agentService,
-  smsChannelService
+  smsChannelService,
+  updateCommandService
 }) => {
-  const handleSessionRoute = createSessionRouteHandler({ agentService });
+  const handleSessionRoute = createSessionRouteHandler({
+    agentService,
+    updateCommandService
+  });
 
   const handleStateRoute = createStateRouteHandler({
     workspace,
