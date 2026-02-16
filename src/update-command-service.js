@@ -11,7 +11,7 @@ const ALREADY_RUNNING_CODE = "already_running";
 const DISABLED_CODE = "disabled";
 const INVALID_ARGS_CODE = "invalid_args";
 const SCRIPT_UNAVAILABLE_CODE = "script_unavailable";
-const INTERRUPTED_CODE = "interrupted";
+const SERVICE_RESTART_HANDOFF_CODE = "service_restart_handoff";
 
 const trimToString = (value) => String(value || "").trim();
 
@@ -44,6 +44,12 @@ const formatDurationMs = (value) => {
 };
 
 const formatArgs = (args) => (args?.length ? args.join(" ") : "(none)");
+
+const parseIsoTimestamp = (value) => {
+  const ts = Date.parse(trimToString(value));
+  if (!Number.isFinite(ts)) return null;
+  return ts;
+};
 
 const sanitizeRun = (value) => {
   if (!value || typeof value !== "object") return null;
@@ -196,8 +202,9 @@ export const formatUpdateStatusText = (status) => {
   }
 
   const run = status.lastRun;
+  const isRestartHandoff = run.code === SERVICE_RESTART_HANDOFF_CODE;
   const lines = [
-    `Last update: ${run.status}`,
+    `Last update: ${isRestartHandoff ? "service restart handoff" : run.status}`,
     `Run: ${run.id}`,
     `Started: ${run.startedAt}`,
     `Finished: ${run.completedAt || "unknown"}`,
@@ -216,6 +223,11 @@ export const formatUpdateStatusText = (status) => {
   }
   if (run.error) {
     lines.push(`Error: ${run.error}`);
+  }
+  if (isRestartHandoff) {
+    lines.push(
+      "Note: The service restarted while this update was running, so the in-process runner could not observe final completion."
+    );
   }
 
   const recentOutput = truncateText([run.stdout, run.stderr].filter(Boolean).join("\n"), 1200);
@@ -283,16 +295,23 @@ export const createUpdateCommandService = ({
         lastRun = persistedLastRun;
       }
       if (persistedCurrentRun) {
-        // If the service restarted while a run was marked running, record it as interrupted.
-        const interruptedAt = new Date().toISOString();
+        // If the service restarted while a run was marked running, preserve it as restart handoff.
+        const completedAtMs = Date.now();
+        const startedAtMs = parseIsoTimestamp(persistedCurrentRun.startedAt);
+        const durationMs =
+          startedAtMs === null
+            ? persistedCurrentRun.durationMs
+            : Math.max(0, completedAtMs - startedAtMs);
+        const completedAt = new Date(completedAtMs).toISOString();
         lastRun = {
           ...persistedCurrentRun,
-          status: "failed",
-          code: INTERRUPTED_CODE,
-          completedAt: interruptedAt,
+          status: "restarted",
+          code: SERVICE_RESTART_HANDOFF_CODE,
+          completedAt,
+          durationMs,
           error:
             persistedCurrentRun.error ||
-            "Update status was interrupted by a service restart before completion."
+            "Update runner was interrupted by a service restart before completion."
         };
         currentRun = null;
         await persistState();

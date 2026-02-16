@@ -50,3 +50,8 @@ Use this file to log incorrect assumptions made by the coding agent.
 - Incorrect assumption: Keeping update command status only in memory was sufficient for `/update-status`.
 - What was actually true: Running updates can restart the service process, which clears in-memory state and makes `/update-status` incorrectly report that no update ran.
 - Adjustment to prevent recurrence: Persist update run state to disk and reload it on startup, converting any previously-running state into an explicit interrupted result.
+
+- Date: 2026-02-16
+- Incorrect assumption: A persisted `running` update state after startup should be reported as a failed interruption.
+- What was actually true: For in-chat updates, a service restart is expected and usually indicates handoff, not a deterministic script failure; reporting hard failure was misleading.
+- Adjustment to prevent recurrence: Classify recovered `running` states as a restart handoff status with explicit guidance, and reserve failed status for confirmed non-zero/timeout/error exits observed by the runner.

@@ -159,7 +159,7 @@ echo "ok"
   assert.match(status.lastRun?.stdout || "", /ok/);
 });
 
-test("update command service marks persisted running status as interrupted on startup", async () => {
+test("update command service marks persisted running status as restart handoff on startup", async () => {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "update-service-"));
   const scriptPath = path.join(tempDir, "update-server.sh");
   const statusFilePath = path.join(tempDir, "status.json");
@@ -214,10 +214,10 @@ echo "ok"
   const status = await service.getStatus();
   assert.equal(status.running, false);
   assert.equal(status.lastRun?.id, "upd_legacy_1");
-  assert.equal(status.lastRun?.status, "failed");
-  assert.equal(status.lastRun?.code, "interrupted");
+  assert.equal(status.lastRun?.status, "restarted");
+  assert.equal(status.lastRun?.code, "service_restart_handoff");
   assert.match(
     status.lastRun?.error || "",
-    /interrupted by a service restart before completion/
+    /runner was interrupted by a service restart before completion/
   );
 });
