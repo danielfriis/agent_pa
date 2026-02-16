@@ -25,3 +25,8 @@ Use this file to log incorrect assumptions made by the coding agent.
 - Incorrect assumption: SMS webhook path handling should require an exact configured path string.
 - What was actually true: Operationally, trailing-slash variations can occur and should not break routing/auth-bypass logic.
 - Adjustment to prevent recurrence: Normalize configured and incoming route paths (trim trailing slash, enforce leading slash) in both route matching and config parsing, with regression tests.
+
+- Date: 2026-02-16
+- Incorrect assumption: Post-deploy SMS fallback replies were primarily due to transient OpenCode startup timing.
+- What was actually true: A malformed JSON file in the local session store caused `SessionStore.listSessions()` to throw, which triggered the SMS fallback path.
+- Adjustment to prevent recurrence: Treat persistent fallback replies as a data-integrity signal first; log the caught exception and harden file-backed stores to quarantine invalid records instead of failing request handling.

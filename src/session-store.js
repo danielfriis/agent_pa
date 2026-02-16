@@ -13,6 +13,9 @@ const toTimestamp = (value) => {
   return 0;
 };
 
+const isErrorCode = (error, code) =>
+  Boolean(error && typeof error === "object" && error.code === code);
+
 export class SessionStore {
   constructor(options) {
     this.sessionsDir = options.sessionsDir;
@@ -33,12 +36,34 @@ export class SessionStore {
 
   async writeSessionFile(sessionId, data) {
     const payload = { ...data, id: sessionId };
-    await fs.writeFile(
-      this.sessionPath(sessionId),
-      `${JSON.stringify(payload, null, 2)}\n`,
-      "utf8"
-    );
+    const finalPath = this.sessionPath(sessionId);
+    const tempPath = `${finalPath}.tmp-${process.pid}-${Date.now()}`;
+    try {
+      await fs.writeFile(tempPath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+      await fs.rename(tempPath, finalPath);
+    } finally {
+      await fs.rm(tempPath, { force: true }).catch(() => {});
+    }
     return payload;
+  }
+
+  async quarantineInvalidSessionFile(filePath, error) {
+    const quarantinePath = `${filePath}.invalid-${Date.now()}`;
+    const detail = error instanceof Error ? error.message : String(error);
+
+    try {
+      await fs.rename(filePath, quarantinePath);
+      process.stderr.write(
+        `[agent-pa] warning: invalid session JSON moved to ${quarantinePath}: ${detail}\n`
+      );
+    } catch (renameError) {
+      if (isErrorCode(renameError, "ENOENT")) return;
+      const renameDetail =
+        renameError instanceof Error ? renameError.message : String(renameError);
+      process.stderr.write(
+        `[agent-pa] warning: invalid session JSON at ${filePath}: ${detail} (rename failed: ${renameDetail})\n`
+      );
+    }
   }
 
   async upsertSession(sessionId, patch) {
@@ -53,10 +78,15 @@ export class SessionStore {
   }
 
   async getSession(sessionId) {
+    const sessionPath = this.sessionPath(sessionId);
     try {
       return await this.readSessionFile(sessionId);
     } catch (error) {
-      if (error && typeof error === "object" && error.code === "ENOENT") {
+      if (isErrorCode(error, "ENOENT")) {
+        return null;
+      }
+      if (error instanceof SyntaxError) {
+        await this.quarantineInvalidSessionFile(sessionPath, error);
         return null;
       }
       throw error;
@@ -69,8 +99,19 @@ export class SessionStore {
 
     for (const entry of entries) {
       if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
-      const raw = await fs.readFile(path.join(this.sessionsDir, entry.name), "utf8");
-      const parsed = JSON.parse(raw);
+      const filePath = path.join(this.sessionsDir, entry.name);
+      let parsed;
+      try {
+        const raw = await fs.readFile(filePath, "utf8");
+        parsed = JSON.parse(raw);
+      } catch (error) {
+        if (isErrorCode(error, "ENOENT")) continue;
+        if (error instanceof SyntaxError) {
+          await this.quarantineInvalidSessionFile(filePath, error);
+          continue;
+        }
+        throw error;
+      }
       if (parsed && typeof parsed === "object" && parsed.id) {
         sessions.push(parsed);
       }
