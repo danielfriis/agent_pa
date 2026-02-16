@@ -113,7 +113,7 @@ export const config = {
       maxReplyChars: int(process.env.SMS_MAX_REPLY_CHARS, 320),
       defaultSystemPrompt:
         process.env.SMS_DEFAULT_SYSTEM_PROMPT ||
-        "You are replying to a user over SMS. Respond with plain text only and keep it concise.",
+        "You are replying to a user over SMS. Access to all tools and skills remains available; SMS only changes response formatting. Respond with plain text only and keep it concise.",
       fallbackReply:
         process.env.SMS_FALLBACK_REPLY || "I hit an error processing that. Please try again shortly.",
       twilio: {

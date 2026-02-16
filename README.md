@@ -174,7 +174,10 @@ SMS_ENABLED=true
 SMS_PROVIDER=twilio
 SMS_INBOUND_PATH=/channels/sms/inbound
 SMS_ALLOW_UNAUTHENTICATED_INBOUND=true
+# Max chars per outbound SMS message. Longer assistant replies are split across multiple messages.
 SMS_MAX_REPLY_CHARS=320
+# Optional override. Keep the "tools and skills remain available" guidance unless intentionally changing behavior.
+# SMS_DEFAULT_SYSTEM_PROMPT=You are replying to a user over SMS. Access to all tools and skills remains available; SMS only changes response formatting. Respond with plain text only and keep it concise.
 SMS_TWILIO_AUTH_TOKEN=your_twilio_auth_token
 SMS_TWILIO_VALIDATE_SIGNATURE=true
 SMS_TWILIO_WEBHOOK_BASE_URL=https://your-public-host.example

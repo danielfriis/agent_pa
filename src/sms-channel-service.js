@@ -13,6 +13,68 @@ const truncateText = (value, maxChars) => {
   return `${text.slice(0, maxChars - 3)}...`;
 };
 
+const splitTextForSmsMessages = (value, maxChars) => {
+  const text = trimToString(value);
+  if (!text) return [];
+  if (!maxChars || maxChars < 1 || text.length <= maxChars) return [text];
+
+  const messages = [];
+  const pushMessage = (next) => {
+    const cleaned = trimToString(next);
+    if (!cleaned) return;
+    messages.push(cleaned);
+  };
+
+  const splitParagraph = (paragraph) => {
+    const words = paragraph.split(/\s+/).filter(Boolean);
+    let current = "";
+    for (const word of words) {
+      if (word.length > maxChars) {
+        if (current) {
+          pushMessage(current);
+          current = "";
+        }
+        for (let start = 0; start < word.length; start += maxChars) {
+          pushMessage(word.slice(start, start + maxChars));
+        }
+        continue;
+      }
+
+      const candidate = current ? `${current} ${word}` : word;
+      if (candidate.length <= maxChars) {
+        current = candidate;
+        continue;
+      }
+
+      pushMessage(current);
+      current = word;
+    }
+
+    if (current) pushMessage(current);
+  };
+
+  const paragraphs = text
+    .split(/\n+/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
+
+  for (const paragraph of paragraphs) {
+    if (paragraph.length > maxChars) {
+      splitParagraph(paragraph);
+      continue;
+    }
+
+    const last = messages[messages.length - 1];
+    if (last && `${last}\n${paragraph}`.length <= maxChars) {
+      messages[messages.length - 1] = `${last}\n${paragraph}`;
+      continue;
+    }
+    pushMessage(paragraph);
+  }
+
+  return messages.length ? messages : [text.slice(0, maxChars)];
+};
+
 const mergeSmsBinding = async (sessionStore, sessionId, patch) => {
   const current = (await sessionStore.getSession(sessionId)) || { id: sessionId };
   const currentBindings = current.channelBindings || {};
@@ -38,7 +100,8 @@ const buildSmsSystemPrompt = ({ defaultPrompt, event, maxReplyChars }) =>
     `- From: ${event.from}`,
     `- To: ${event.to}`,
     `- Account ID: ${event.accountId || "unknown"}`,
-    `- Reply with plain text only and keep the message under ${maxReplyChars} characters.`
+    "- You still have access to all tools and skills available in this runtime. SMS only changes response formatting.",
+    `- Reply with plain text only. If needed, split across multiple SMS messages and keep each message under ${maxReplyChars} characters.`
   ]
     .filter(Boolean)
     .join("\n");
@@ -71,12 +134,12 @@ export const createSmsChannelService = ({ agentService, sessionStore, config }) 
     return { id: created.id, created: true };
   };
 
-  const buildReplyPayload = (text) => ({
+  const buildReplyPayload = (messages) => ({
     contentType: "text/xml; charset=utf-8",
-    body: provider.formatReply(text)
+    body: provider.formatReply(messages)
   });
 
-  const fallbackReply = truncateText(
+  const fallbackReplyMessages = splitTextForSmsMessages(
     smsConfig.fallbackReply || "I hit an error processing that. Please try again shortly.",
     smsConfig.maxReplyChars
   );
@@ -143,7 +206,11 @@ export const createSmsChannelService = ({ agentService, sessionStore, config }) 
         system: systemPrompt
       });
 
-      const assistantText = truncateText(reply.assistantText || fallbackReply, smsConfig.maxReplyChars);
+      const assistantReplyMessages = splitTextForSmsMessages(
+        reply.assistantText || fallbackReplyMessages.join("\n"),
+        smsConfig.maxReplyChars
+      );
+      const assistantText = truncateText(assistantReplyMessages.join("\n"), 5000);
       const now = new Date().toISOString();
       await mergeSmsBinding(sessionStore, session.id, {
         provider: provider.provider,
@@ -164,7 +231,7 @@ export const createSmsChannelService = ({ agentService, sessionStore, config }) 
         sessionId: session.id,
         conversationKey,
         createdSession: session.created,
-        response: buildReplyPayload(assistantText)
+        response: buildReplyPayload(assistantReplyMessages)
       };
     } catch {
       return {
@@ -173,7 +240,7 @@ export const createSmsChannelService = ({ agentService, sessionStore, config }) 
         sessionId: null,
         conversationKey,
         createdSession: false,
-        response: buildReplyPayload(fallbackReply)
+        response: buildReplyPayload(fallbackReplyMessages)
       };
     }
   };

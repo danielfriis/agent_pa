@@ -57,6 +57,11 @@ const twilioForm = (overrides = {}) => ({
   ...overrides
 });
 
+const extractTwilioMessages = (xml) =>
+  [...String(xml || "").matchAll(/<Message>([\s\S]*?)<\/Message>/g)].map((match) => match[1]);
+
+const normalizeWhitespace = (value) => String(value || "").replace(/\s+/g, " ").trim();
+
 test("sms channel creates a session then reuses it for same provider/account/to/from tuple", async () => {
   const createdSessions = [];
   const sentMessages = [];
@@ -98,6 +103,10 @@ test("sms channel creates a session then reuses it for same provider/account/to/
   assert.equal(sentMessages.length, 2);
   assert.equal(sentMessages[0].sessionId, "ses_1");
   assert.equal(sentMessages[1].sessionId, "ses_1");
+  assert.match(
+    sentMessages[0].system,
+    /You still have access to all tools and skills available in this runtime/
+  );
 });
 
 test("sms channel rejects inbound messages for destination numbers outside allowlist", async () => {
@@ -177,4 +186,35 @@ test("sms channel validates Twilio webhook signatures when enabled", async () =>
   assert.equal(valid.ok, true);
   assert.equal(invalid.ok, false);
   assert.equal(invalid.status, 403);
+});
+
+test("sms channel splits long assistant replies into multiple Twilio messages", async () => {
+  const sessionStore = createMockSessionStore();
+  const longReply =
+    "one two three four five six seven eight nine ten eleven twelve thirteen fourteen";
+  const agentService = {
+    createSession: async () => ({ id: "ses_1" }),
+    sendUserMessage: async () => ({ assistantText: longReply })
+  };
+  const maxReplyChars = 24;
+  const service = createSmsChannelService({
+    agentService,
+    sessionStore,
+    config: createSmsConfig({ maxReplyChars })
+  });
+
+  const result = await service.handleInboundWebhook({
+    headers: {},
+    form: twilioForm(),
+    path: "/channels/sms/inbound",
+    queryString: ""
+  });
+
+  assert.equal(result.ok, true);
+  const messages = extractTwilioMessages(result.response.body);
+  assert.ok(messages.length > 1);
+  for (const message of messages) {
+    assert.ok(message.length <= maxReplyChars);
+  }
+  assert.equal(normalizeWhitespace(messages.join(" ")), normalizeWhitespace(longReply));
 });

@@ -132,8 +132,15 @@ export const createTwilioSmsAdapter = (twilioConfig = {}) => {
     return allowedToSet.has(normalizeEndpoint(to));
   };
 
-  const formatReply = (text) =>
-    `<?xml version="1.0" encoding="UTF-8"?><Response><Message>${escapeXml(text)}</Message></Response>`;
+  const formatReply = (texts) => {
+    const messages = asArray(texts)
+      .map((text) => String(text ?? ""))
+      .filter((text) => text.length > 0);
+    const xmlMessages = (messages.length ? messages : [""])
+      .map((text) => `<Message>${escapeXml(text)}</Message>`)
+      .join("");
+    return `<?xml version="1.0" encoding="UTF-8"?><Response>${xmlMessages}</Response>`;
+  };
 
   return {
     provider: "twilio",
