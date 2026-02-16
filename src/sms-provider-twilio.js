@@ -32,6 +32,11 @@ const flattenParams = (params) => {
   return output;
 };
 
+const sleep = (delayMs) =>
+  new Promise((resolve) => {
+    setTimeout(resolve, delayMs);
+  });
+
 const buildTwilioSignaturePayload = (signatureUrl, params) => {
   let payload = signatureUrl;
   for (const key of Object.keys(params).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))) {
@@ -144,10 +149,114 @@ export const createTwilioSmsAdapter = (twilioConfig = {}) => {
     const messages = asArray(texts)
       .map((text) => String(text ?? ""))
       .filter((text) => text.length > 0);
-    const xmlMessages = (messages.length ? messages : [""])
-      .map((text) => `<Message>${escapeXml(text)}</Message>`)
-      .join("");
+    if (!messages.length) {
+      return '<?xml version="1.0" encoding="UTF-8"?><Response></Response>';
+    }
+    const xmlMessages = messages.map((text) => `<Message>${escapeXml(text)}</Message>`).join("");
     return `<?xml version="1.0" encoding="UTF-8"?><Response>${xmlMessages}</Response>`;
+  };
+
+  const sendReply = async ({ event, texts, delayMs = 0 }) => {
+    const messages = asArray(texts)
+      .map((text) => String(text ?? ""))
+      .filter((text) => text.length > 0);
+    if (!messages.length) {
+      return {
+        ok: true,
+        sentCount: 0,
+        messageIds: []
+      };
+    }
+
+    const accountId = first(event?.accountId).trim();
+    const from = first(event?.to).trim();
+    const to = first(event?.from).trim();
+    if (!accountId || !from || !to) {
+      return {
+        ok: false,
+        status: 400,
+        sentCount: 0,
+        error: "Twilio outbound send requires accountId, to, and from values."
+      };
+    }
+
+    const authToken = resolveAuthToken(accountId);
+    if (!authToken) {
+      return {
+        ok: false,
+        status: 500,
+        sentCount: 0,
+        error: "Twilio outbound send failed: no auth token configured for account."
+      };
+    }
+
+    const apiUrl = `https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(accountId)}/Messages.json`;
+    const authHeader = `Basic ${Buffer.from(`${accountId}:${authToken}`, "utf8").toString("base64")}`;
+    const messageIds = [];
+    let sentCount = 0;
+
+    for (const message of messages) {
+      const form = new URLSearchParams();
+      form.set("From", from);
+      form.set("To", to);
+      form.set("Body", message);
+
+      let response;
+      try {
+        response = await fetch(apiUrl, {
+          method: "POST",
+          headers: {
+            "content-type": "application/x-www-form-urlencoded",
+            authorization: authHeader
+          },
+          body: form.toString()
+        });
+      } catch (error) {
+        return {
+          ok: false,
+          status: 502,
+          sentCount,
+          error: `Twilio outbound send failed: ${error instanceof Error ? error.message : String(error)}`
+        };
+      }
+
+      let payload = null;
+      let responseText = "";
+      try {
+        responseText = await response.text();
+        payload = responseText ? JSON.parse(responseText) : null;
+      } catch {
+        payload = null;
+      }
+
+      if (!response.ok) {
+        const providerError =
+          first(payload?.message).trim() ||
+          first(payload?.detail).trim() ||
+          responseText.trim() ||
+          response.statusText ||
+          "Unknown Twilio API error.";
+        return {
+          ok: false,
+          status: response.status,
+          sentCount,
+          error: `Twilio outbound send failed (${response.status}): ${providerError}`
+        };
+      }
+
+      const messageId = first(payload?.sid).trim();
+      if (messageId) messageIds.push(messageId);
+      sentCount += 1;
+      if (delayMs > 0 && sentCount < messages.length) {
+        await sleep(delayMs);
+      }
+    }
+
+    return {
+      ok: true,
+      sentCount,
+      messageIds
+    };
   };
 
   return {
@@ -156,7 +265,8 @@ export const createTwilioSmsAdapter = (twilioConfig = {}) => {
     verifyRequest,
     isAllowedDestination,
     isAllowedSender,
-    formatReply
+    formatReply,
+    sendReply
   };
 };
 

@@ -9,6 +9,11 @@ import {
 } from "./shared-chat-commands.js";
 
 const trimToString = (value) => String(value || "").trim();
+const toNonNegativeInt = (value, fallback = 0) => {
+  const parsed = Number.parseInt(value, 10);
+  if (Number.isNaN(parsed) || parsed < 0) return fallback;
+  return parsed;
+};
 
 const truncateText = (value, maxChars) => {
   const text = trimToString(value);
@@ -226,6 +231,11 @@ export const createSmsChannelService = ({ agentService, sessionStore, config }) 
   ]);
 
   const provider = providers.get(providerName);
+  const replyMessageDelayMs = toNonNegativeInt(smsConfig.replyMessageDelayMs, 0);
+  const shouldUseDelayedOutboundSend =
+    replyMessageDelayMs > 0 &&
+    Boolean(smsConfig.twilio?.validateSignature) &&
+    typeof provider?.sendReply === "function";
   const conversationQueueTailByKey = new Map();
 
   const enqueueConversationWork = async (conversationKey, run) => {
@@ -260,10 +270,32 @@ export const createSmsChannelService = ({ agentService, sessionStore, config }) 
     return { id: created.id, created: true };
   };
 
-  const buildReplyPayload = (messages) => ({
+  const buildTwimlReplyPayload = (messages) => ({
     contentType: "text/xml; charset=utf-8",
     body: provider.formatReply(messages)
   });
+
+  const buildReplyPayload = async ({ event, messages }) => {
+    if (!shouldUseDelayedOutboundSend) {
+      return buildTwimlReplyPayload(messages);
+    }
+
+    const outbound = await provider.sendReply({
+      event,
+      texts: messages,
+      delayMs: replyMessageDelayMs
+    });
+    if (outbound.ok) {
+      return buildTwimlReplyPayload([]);
+    }
+
+    const detail = trimToString(outbound.error) || "Unknown outbound error.";
+    process.stderr.write(`[agent-pa] sms outbound failed: ${detail}\n`);
+    if (outbound.sentCount > 0) {
+      return buildTwimlReplyPayload([]);
+    }
+    return buildTwimlReplyPayload(messages);
+  };
 
   const toReplyMessages = (text) =>
     formatSmsReplyMessages(text, {
@@ -313,7 +345,7 @@ export const createSmsChannelService = ({ agentService, sessionStore, config }) 
         sessionId: null,
         conversationKey: null,
         createdSession: false,
-        response: buildReplyPayload(unauthorizedReplyMessages)
+        response: buildTwimlReplyPayload(unauthorizedReplyMessages)
       };
     }
 
@@ -349,7 +381,10 @@ export const createSmsChannelService = ({ agentService, sessionStore, config }) 
               sessionId: null,
               conversationKey,
               createdSession: false,
-              response: buildReplyPayload(replyMessages)
+              response: await buildReplyPayload({
+                event,
+                messages: replyMessages
+              })
             };
           }
 
@@ -365,7 +400,10 @@ export const createSmsChannelService = ({ agentService, sessionStore, config }) 
               sessionId: existing?.id || null,
               conversationKey,
               createdSession: false,
-              response: buildReplyPayload(replyMessages)
+              response: await buildReplyPayload({
+                event,
+                messages: replyMessages
+              })
             };
           }
 
@@ -400,7 +438,10 @@ export const createSmsChannelService = ({ agentService, sessionStore, config }) 
               sessionId: created.id,
               conversationKey,
               createdSession: true,
-              response: buildReplyPayload(replyMessages)
+              response: await buildReplyPayload({
+                event,
+                messages: replyMessages
+              })
             };
           }
         }
@@ -441,7 +482,10 @@ export const createSmsChannelService = ({ agentService, sessionStore, config }) 
           sessionId: session.id,
           conversationKey,
           createdSession: session.created,
-          response: buildReplyPayload(assistantReplyMessages)
+          response: await buildReplyPayload({
+            event,
+            messages: assistantReplyMessages
+          })
         };
       } catch (error) {
         const detail = error instanceof Error ? error.stack || error.message : String(error);
@@ -452,7 +496,10 @@ export const createSmsChannelService = ({ agentService, sessionStore, config }) 
           sessionId: null,
           conversationKey,
           createdSession: false,
-          response: buildReplyPayload(fallbackReplyMessages)
+          response: await buildReplyPayload({
+            event,
+            messages: fallbackReplyMessages
+          })
         };
       }
     });

@@ -40,3 +40,8 @@ Use this file to log incorrect assumptions made by the coding agent.
 - Incorrect assumption: `opencode debug config` would run reliably inside this sandboxed environment for local introspection.
 - What was actually true: The command failed with `EPERM` while initializing OpenCode logging in the sandbox, so it was not a dependable way to inspect runtime settings here.
 - Adjustment to prevent recurrence: Use project config files (`opencode.json`, `.env`, synced tool files) as the primary inspection source in sandboxed runs, and only use OpenCode debug commands when unrestricted execution is available.
+
+- Date: 2026-02-16
+- Incorrect assumption: Returning `provider.formatReply([])` would produce an empty TwiML response with no outbound message side effects.
+- What was actually true: The formatter emitted `<Message></Message>` for empty input, which represented a blank message node instead of a truly empty response.
+- Adjustment to prevent recurrence: For no-op webhook acknowledgements, explicitly render `<Response></Response>` and add tests that assert empty-message behavior for provider formatters.

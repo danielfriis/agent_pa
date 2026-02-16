@@ -35,6 +35,7 @@ const createSmsConfig = (overrides = {}) => ({
       allowUnauthenticatedInbound: true,
       maxReplyChars: 320,
       includeSequenceLabels: false,
+      replyMessageDelayMs: 0,
       defaultSystemPrompt: "Reply as SMS.",
       unauthorizedReply: "This phone number is not authorized to use this SMS channel.",
       fallbackReply: "Fallback.",
@@ -51,6 +52,16 @@ const createSmsConfig = (overrides = {}) => ({
   }
 });
 
+const withMockedFetch = async (mock, run) => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = mock;
+  try {
+    return await run();
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+};
+
 const twilioForm = (overrides = {}) => ({
   AccountSid: "AC123",
   MessageSid: "SM123",
@@ -59,6 +70,16 @@ const twilioForm = (overrides = {}) => ({
   Body: "hello",
   ...overrides
 });
+
+const createTwilioSignature = ({ authToken, signatureUrl, form }) => {
+  const signatureBase = Object.keys(form)
+    .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+    .map((key) => `${key}${form[key]}`)
+    .join("");
+  return createHmac("sha1", authToken)
+    .update(`${signatureUrl}${signatureBase}`, "utf8")
+    .digest("base64");
+};
 
 const unescapeTwimlText = (value) =>
   String(value || "")
@@ -280,13 +301,11 @@ test("sms channel validates Twilio webhook signatures when enabled", async () =>
     config
   });
   const form = twilioForm();
-  const signatureBase = Object.keys(form)
-    .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
-    .map((key) => `${key}${form[key]}`)
-    .join("");
-  const signature = createHmac("sha1", authToken)
-    .update(`https://example.com/channels/sms/inbound${signatureBase}`, "utf8")
-    .digest("base64");
+  const signature = createTwilioSignature({
+    authToken,
+    signatureUrl: "https://example.com/channels/sms/inbound",
+    form
+  });
 
   const valid = await service.handleInboundWebhook({
     headers: { "x-twilio-signature": signature },
@@ -407,6 +426,118 @@ test("sms channel normalizes markdown-heavy assistant replies for plain SMS text
   assert.ok(!combined.includes("→"));
   assert.match(combined, /Scandinavian Photo \(https:\/\/example\.com\/shop\)/);
   assert.match(combined, /one specific strap -> right now\./);
+});
+
+test("sms channel can pace multipart replies via Twilio API when delay is configured", async () => {
+  const sessionStore = createMockSessionStore();
+  const longReply =
+    "one two three four five six seven eight nine ten eleven twelve thirteen fourteen";
+  const delayMs = 20;
+  const agentService = {
+    createSession: async () => ({ id: "ses_1" }),
+    sendUserMessage: async () => ({ assistantText: longReply })
+  };
+  const service = createSmsChannelService({
+    agentService,
+    sessionStore,
+    config: createSmsConfig({
+      maxReplyChars: 24,
+      replyMessageDelayMs: delayMs,
+      twilio: {
+        authToken: "token",
+        authTokensByAccountSid: {},
+        validateSignature: true,
+        webhookBaseUrl: "https://example.com",
+        allowedToNumbers: [],
+        allowedFromNumbers: []
+      }
+    })
+  });
+
+  const outboundBodies = [];
+  const outboundTimes = [];
+  const form = twilioForm();
+  const signature = createTwilioSignature({
+    authToken: "token",
+    signatureUrl: "https://example.com/channels/sms/inbound",
+    form
+  });
+  await withMockedFetch(async (url, init = {}) => {
+    assert.match(String(url), /\/Accounts\/AC123\/Messages\.json$/);
+    outboundTimes.push(Date.now());
+    outboundBodies.push(new URLSearchParams(String(init.body || "")));
+    return {
+      ok: true,
+      status: 201,
+      text: async () => JSON.stringify({ sid: `SM-outbound-${outboundTimes.length}` })
+    };
+  }, async () => {
+    const result = await service.handleInboundWebhook({
+      headers: { "x-twilio-signature": signature },
+      form,
+      path: "/channels/sms/inbound",
+      queryString: ""
+    });
+
+    assert.equal(result.ok, true);
+    assert.deepEqual(extractTwilioMessages(result.response.body), []);
+  });
+
+  assert.ok(outboundBodies.length > 1);
+  for (const body of outboundBodies) {
+    assert.equal(body.get("From"), "+15559998888");
+    assert.equal(body.get("To"), "+15550001111");
+    assert.ok(body.get("Body"));
+  }
+  for (let i = 1; i < outboundTimes.length; i += 1) {
+    assert.ok(outboundTimes[i] - outboundTimes[i - 1] >= delayMs - 2);
+  }
+});
+
+test("sms channel falls back to TwiML when delayed outbound send cannot start", async () => {
+  const sessionStore = createMockSessionStore();
+  const longReply =
+    "one two three four five six seven eight nine ten eleven twelve thirteen fourteen";
+  const agentService = {
+    createSession: async () => ({ id: "ses_1" }),
+    sendUserMessage: async () => ({ assistantText: longReply })
+  };
+  const service = createSmsChannelService({
+    agentService,
+    sessionStore,
+    config: createSmsConfig({
+      maxReplyChars: 24,
+      replyMessageDelayMs: 20,
+      twilio: {
+        authToken: "token",
+        authTokensByAccountSid: {},
+        validateSignature: true,
+        webhookBaseUrl: "https://example.com",
+        allowedToNumbers: [],
+        allowedFromNumbers: []
+      }
+    })
+  });
+
+  const form = twilioForm();
+  const signature = createTwilioSignature({
+    authToken: "token",
+    signatureUrl: "https://example.com/channels/sms/inbound",
+    form
+  });
+  const result = await withMockedFetch(async () => {
+    throw new Error("network down");
+  }, async () =>
+    service.handleInboundWebhook({
+      headers: { "x-twilio-signature": signature },
+      form,
+      path: "/channels/sms/inbound",
+      queryString: ""
+    })
+  );
+
+  assert.equal(result.ok, true);
+  assert.ok(extractTwilioMessages(result.response.body).length > 1);
 });
 
 test("sms channel serializes concurrent inbound requests for the same conversation", async () => {

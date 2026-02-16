@@ -140,7 +140,8 @@ API auth defaults to off. If `APP_API_TOKEN` is set, auth is enabled automatical
 `GET /health` remains public by default; set `APP_ALLOW_UNAUTHENTICATED_HEALTH=false` to protect it.
 When SMS is enabled, `/channels/sms/inbound` can be kept public with
 `SMS_ALLOW_UNAUTHENTICATED_INBOUND=true` and protected with provider signature verification.
-`SMS_INCLUDE_SEQUENCE_LABELS=false` (default) keeps multipart SMS replies label-free while preserving deterministic message order in the generated TwiML response.
+`SMS_INCLUDE_SEQUENCE_LABELS=false` (default) keeps multipart SMS replies label-free.
+Set `SMS_REPLY_MESSAGE_DELAY_MS` (for example `250`) to send multipart replies one chunk at a time with small pacing delays (applies when `SMS_TWILIO_VALIDATE_SIGNATURE=true`).
 
 Start modes:
 - `npm run start:server` starts only the HTTP server so channel clients can connect.
@@ -192,6 +193,9 @@ SMS_ALLOW_UNAUTHENTICATED_INBOUND=true
 SMS_MAX_REPLY_CHARS=320
 # Optional: prefix multipart SMS chunks with [1/N], [2/N], ... for visible ordering hints.
 SMS_INCLUDE_SEQUENCE_LABELS=false
+# Optional: when >0, send multipart replies via Twilio API with this delay between chunks (ms).
+# Requires SMS_TWILIO_VALIDATE_SIGNATURE=true.
+SMS_REPLY_MESSAGE_DELAY_MS=0
 # Optional override. Keep the "tools and skills remain available" guidance unless intentionally changing behavior.
 # SMS_DEFAULT_SYSTEM_PROMPT=You are replying to a user over SMS. Access to all tools and skills remains available; SMS only changes response formatting. Respond with plain text only and keep it concise.
 # Optional canned reply for sender numbers that are not allowed.
