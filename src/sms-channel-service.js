@@ -268,7 +268,7 @@ export const createSmsChannelService = ({ agentService, sessionStore, config }) 
   const toReplyMessages = (text) =>
     formatSmsReplyMessages(text, {
       maxChars: smsConfig.maxReplyChars,
-      includeSequenceLabels: smsConfig.includeSequenceLabels !== false
+      includeSequenceLabels: Boolean(smsConfig.includeSequenceLabels)
     });
 
   const fallbackReplyMessages = toReplyMessages(

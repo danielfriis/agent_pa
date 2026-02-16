@@ -34,7 +34,7 @@ const createSmsConfig = (overrides = {}) => ({
       inboundPath: "/channels/sms/inbound",
       allowUnauthenticatedInbound: true,
       maxReplyChars: 320,
-      includeSequenceLabels: true,
+      includeSequenceLabels: false,
       defaultSystemPrompt: "Reply as SMS.",
       unauthorizedReply: "This phone number is not authorized to use this SMS channel.",
       fallbackReply: "Fallback.",
@@ -306,7 +306,7 @@ test("sms channel validates Twilio webhook signatures when enabled", async () =>
   assert.equal(invalid.status, 403);
 });
 
-test("sms channel splits long assistant replies into multiple Twilio messages", async () => {
+test("sms channel splits long assistant replies into multiple Twilio messages without sequence labels by default", async () => {
   const sessionStore = createMockSessionStore();
   const longReply =
     "one two three four five six seven eight nine ten eleven twelve thirteen fourteen";
@@ -319,6 +319,38 @@ test("sms channel splits long assistant replies into multiple Twilio messages", 
     agentService,
     sessionStore,
     config: createSmsConfig({ maxReplyChars })
+  });
+
+  const result = await service.handleInboundWebhook({
+    headers: {},
+    form: twilioForm(),
+    path: "/channels/sms/inbound",
+    queryString: ""
+  });
+
+  assert.equal(result.ok, true);
+  const messages = extractTwilioMessages(result.response.body);
+  assert.ok(messages.length > 1);
+  for (const message of messages) {
+    assert.ok(message.length <= maxReplyChars);
+    assert.doesNotMatch(message, /^\[\d+\/\d+\]\s/);
+  }
+  assert.equal(normalizeWhitespace(messages.join(" ")), normalizeWhitespace(longReply));
+});
+
+test("sms channel can include sequence labels when enabled", async () => {
+  const sessionStore = createMockSessionStore();
+  const longReply =
+    "one two three four five six seven eight nine ten eleven twelve thirteen fourteen";
+  const agentService = {
+    createSession: async () => ({ id: "ses_1" }),
+    sendUserMessage: async () => ({ assistantText: longReply })
+  };
+  const maxReplyChars = 24;
+  const service = createSmsChannelService({
+    agentService,
+    sessionStore,
+    config: createSmsConfig({ maxReplyChars, includeSequenceLabels: true })
   });
 
   const result = await service.handleInboundWebhook({
