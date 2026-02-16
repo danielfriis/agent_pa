@@ -38,6 +38,7 @@ echo "running update: $*"
   const service = createUpdateCommandService({
     enabled: true,
     scriptPath,
+    statusFilePath: path.join(tempDir, "status.json"),
     timeoutMs: 2000,
     maxOutputChars: 2000
   });
@@ -73,6 +74,7 @@ echo "done"
   const service = createUpdateCommandService({
     enabled: true,
     scriptPath,
+    statusFilePath: path.join(tempDir, "status.json"),
     timeoutMs: 4000,
     maxOutputChars: 2000
   });
@@ -103,6 +105,7 @@ echo "ok"
   const service = createUpdateCommandService({
     enabled: true,
     scriptPath,
+    statusFilePath: path.join(tempDir, "status.json"),
     timeoutMs: 2000,
     maxOutputChars: 2000
   });
@@ -114,4 +117,107 @@ echo "ok"
   assert.equal(result.ok, false);
   assert.equal(result.code, "invalid_args");
   assert.match(result.error, /Unsupported update option/);
+});
+
+test("update command service loads persisted last run across restarts", async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "update-service-"));
+  const scriptPath = path.join(tempDir, "update-server.sh");
+  const statusFilePath = path.join(tempDir, "status.json");
+
+  await writeExecutableScript(
+    scriptPath,
+    `#!/usr/bin/env bash
+set -euo pipefail
+echo "ok"
+`
+  );
+
+  const firstService = createUpdateCommandService({
+    enabled: true,
+    scriptPath,
+    statusFilePath,
+    timeoutMs: 2000,
+    maxOutputChars: 2000
+  });
+
+  const started = await firstService.startUpdate();
+  assert.equal(started.ok, true);
+  await waitForUpdateToFinish(firstService);
+
+  const secondService = createUpdateCommandService({
+    enabled: true,
+    scriptPath,
+    statusFilePath,
+    timeoutMs: 2000,
+    maxOutputChars: 2000
+  });
+
+  const status = await secondService.getStatus();
+  assert.equal(status.running, false);
+  assert.equal(status.lastRun?.status, "succeeded");
+  assert.equal(status.lastRun?.exitCode, 0);
+  assert.match(status.lastRun?.stdout || "", /ok/);
+});
+
+test("update command service marks persisted running status as interrupted on startup", async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "update-service-"));
+  const scriptPath = path.join(tempDir, "update-server.sh");
+  const statusFilePath = path.join(tempDir, "status.json");
+
+  await writeExecutableScript(
+    scriptPath,
+    `#!/usr/bin/env bash
+set -euo pipefail
+echo "ok"
+`
+  );
+
+  await fs.writeFile(
+    statusFilePath,
+    JSON.stringify(
+      {
+        currentRun: {
+          id: "upd_legacy_1",
+          status: "running",
+          code: "started",
+          scriptPath,
+          args: [],
+          channel: "sms:twilio",
+          requestedBy: "+15550001111",
+          startedAt: "2026-02-16T00:00:00.000Z",
+          completedAt: null,
+          durationMs: 1000,
+          exitCode: null,
+          signal: null,
+          timedOut: false,
+          pid: 1234,
+          error: "",
+          stdout: "started",
+          stderr: ""
+        },
+        lastRun: null
+      },
+      null,
+      2
+    ),
+    "utf8"
+  );
+
+  const service = createUpdateCommandService({
+    enabled: true,
+    scriptPath,
+    statusFilePath,
+    timeoutMs: 2000,
+    maxOutputChars: 2000
+  });
+
+  const status = await service.getStatus();
+  assert.equal(status.running, false);
+  assert.equal(status.lastRun?.id, "upd_legacy_1");
+  assert.equal(status.lastRun?.status, "failed");
+  assert.equal(status.lastRun?.code, "interrupted");
+  assert.match(
+    status.lastRun?.error || "",
+    /interrupted by a service restart before completion/
+  );
 });

@@ -45,3 +45,8 @@ Use this file to log incorrect assumptions made by the coding agent.
 - Incorrect assumption: Returning `provider.formatReply([])` would produce an empty TwiML response with no outbound message side effects.
 - What was actually true: The formatter emitted `<Message></Message>` for empty input, which represented a blank message node instead of a truly empty response.
 - Adjustment to prevent recurrence: For no-op webhook acknowledgements, explicitly render `<Response></Response>` and add tests that assert empty-message behavior for provider formatters.
+
+- Date: 2026-02-16
+- Incorrect assumption: Keeping update command status only in memory was sufficient for `/update-status`.
+- What was actually true: Running updates can restart the service process, which clears in-memory state and makes `/update-status` incorrectly report that no update ran.
+- Adjustment to prevent recurrence: Persist update run state to disk and reload it on startup, converting any previously-running state into an explicit interrupted result.
