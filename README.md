@@ -137,7 +137,7 @@ By default this app assumes OpenCode server at `http://127.0.0.1:4096`.
 `OPENCODE_REQUEST_TIMEOUT_MS` defaults to `0` (no timeout) to allow long-running upstream tasks; set a positive value (for example `180000`) to fail stalled requests fast.
 For real model responses, set `OPENAI_API_KEY` in `.env`.
 OpenCode directory defaults to `agent_workspace/` and can be overridden with `OPENCODE_DIRECTORY`.
-Defaults directory is `agent_defaults/` (`AGENT_DEFAULTS_DIR` overrides). Mutable state directory is `agent_state/` (`AGENT_STATE_DIR` overrides; `AGENT_CONFIG_DIR` remains a legacy alias).
+Defaults directory is `agent_defaults/` (`AGENT_DEFAULTS_DIR` overrides). Mutable state directory is `agent_state/` (`AGENT_STATE_DIR` overrides).
 Session metadata files default to `agent_state/sessions/` and can be overridden with `STORE_DIR`.
 Per-session transcript logs are optional and disabled by default. Enable with
 `SESSION_LOG_ENABLED=true`; logs are written as JSONL files under

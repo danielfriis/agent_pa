@@ -21,10 +21,9 @@ export const main = async () => {
     throw new Error("APP_REQUIRE_AUTH=true requires APP_API_TOKEN to be set.");
   }
 
-  // Ensure child processes (OpenCode + tools) receive absolute workspace/config paths.
+  // Ensure child processes (OpenCode + tools) receive absolute workspace/state paths.
   process.env.AGENT_DEFAULTS_DIR = config.agent.defaultsDir;
   process.env.AGENT_STATE_DIR = config.agent.stateDir;
-  process.env.AGENT_CONFIG_DIR = config.agent.stateDir;
   process.env.AGENT_WORKSPACE_DIR = config.agent.workspaceDir;
   process.env.OPENCODE_DIRECTORY = config.opencode.directory;
   process.env.AGENT_APP_BASE_URL = (

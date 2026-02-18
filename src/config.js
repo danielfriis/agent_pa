@@ -59,7 +59,7 @@ const agentWorkspaceDir = resolveDir(
   path.resolve(process.cwd(), "agent_workspace")
 );
 const agentStateDir = resolveDir(
-  process.env.AGENT_STATE_DIR || process.env.AGENT_CONFIG_DIR,
+  process.env.AGENT_STATE_DIR,
   path.resolve(process.cwd(), "agent_state")
 );
 const agentDefaultsDir = resolveDir(
@@ -80,9 +80,7 @@ export const config = {
   agent: {
     workspaceDir: agentWorkspaceDir,
     stateDir: agentStateDir,
-    defaultsDir: agentDefaultsDir,
-    // Backward-compatible alias for legacy modules/tools still referencing configDir.
-    configDir: agentStateDir
+    defaultsDir: agentDefaultsDir
   },
   memory: {
     maxChars: int(process.env.MEMORY_MAX_CHARS, 6000)

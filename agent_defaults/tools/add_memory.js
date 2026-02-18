@@ -6,7 +6,7 @@ const toAbsolutePath = (value) =>
   path.isAbsolute(value) ? value : path.resolve(process.cwd(), value);
 
 const resolveStateDir = () => {
-  const raw = process.env.AGENT_STATE_DIR || process.env.AGENT_CONFIG_DIR || "agent_state";
+  const raw = process.env.AGENT_STATE_DIR || "agent_state";
   return toAbsolutePath(raw);
 };
 
