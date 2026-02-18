@@ -32,6 +32,12 @@ This project is an agent for people to complete many different tasks. Each agent
 7. Treat architecture as a top priority; always assess architectural impact before implementing.
 8. After implementation, review the result against the architecture and refine it if needed.
 9. Treat each core concept as its own product slice with coherent ownership; group related interfaces, modules, and docs together under that concept instead of mixing concerns.
+10. Prefer structural solutions over inline hacks.
+11. Keep built-in defaults as real files under `agent_defaults/` (tools, skills, system prompts); do not embed large source blobs inside orchestration modules.
+12. Keep mutable user/runtime state under `agent_state/` (memory, sessions, overrides, logs, generated effective layers).
+13. Keep task execution files in `agent_workspace/`.
+14. When layering defaults and state, use deterministic precedence and apply it consistently (`state` overrides `defaults` for matching relative paths).
+15. Keep sync/orchestration modules focused on wiring and copy/merge behavior, not on carrying content payloads.
 
 ## Contracts
 
@@ -50,6 +56,7 @@ This project is an agent for people to complete many different tasks. Each agent
 3. During refactors/reorgs, update imports/scripts/tests/docs in the same change.
 4. Remove stale files and references after reorganizing.
 5. Build-out phase: migrations are optional; keep data structures easy to revise.
+6. Prefer structural refactors (clear module/file ownership) over quick inline patches when adding core capabilities.
 
 ## Testing and Operations
 

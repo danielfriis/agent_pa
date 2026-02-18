@@ -76,7 +76,7 @@ Enable per-session JSONL logs for debugging across API/terminal/SMS:
 ```bash
 SESSION_LOG_ENABLED=true
 # Optional:
-# SESSION_LOG_DIR=/path/to/agent_config/session_logs
+# SESSION_LOG_DIR=/path/to/agent_state/session_logs
 # SESSION_LOG_MAX_CHARS=2000
 # SESSION_LOG_INCLUDE_SYSTEM=false
 ```

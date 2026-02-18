@@ -55,3 +55,22 @@ Use this file to log incorrect assumptions made by the coding agent.
 - Incorrect assumption: A persisted `running` update state after startup should be reported as a failed interruption.
 - What was actually true: For in-chat updates, a service restart is expected and usually indicates handoff, not a deterministic script failure; reporting hard failure was misleading.
 - Adjustment to prevent recurrence: Classify recovered `running` states as a restart handoff status with explicit guidance, and reserve failed status for confirmed non-zero/timeout/error exits observed by the runner.
+
+## 2026-02-17
+
+- Date: 2026-02-17
+- Incorrect assumption: The route handler config object always includes `config.app` when building absolute URLs.
+- What was actually true: Route tests and some injected configs can omit `config.app`, causing undefined host/port access and a `500` response.
+- Adjustment to prevent recurrence: Treat optional config slices defensively in route modules and provide explicit host/port fallbacks when building URLs.
+
+## 2026-02-18
+
+- Date: 2026-02-18
+- Incorrect assumption: Adding managed tools by embedding full source code as large inline template strings in sync/orchestration modules was an acceptable long-term structure.
+- What was actually true: Inline source blobs obscured architecture boundaries and made maintenance/refactoring harder than keeping built-ins as first-class files.
+- Adjustment to prevent recurrence: Keep built-in tools/skills/system prompts as file-based defaults in a dedicated defaults directory, and keep sync modules focused on layering/copying instead of carrying embedded code content.
+
+- Date: 2026-02-18
+- Incorrect assumption: Test setup could create directories and write nested files in the same `Promise.all` batch without ordering guarantees.
+- What was actually true: Parallel writes to nested paths failed with `ENOENT` when directory creation had not completed first.
+- Adjustment to prevent recurrence: Create prerequisite directories before concurrent write batches, or sequence dependent file operations explicitly in tests.

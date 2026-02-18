@@ -58,9 +58,13 @@ const agentWorkspaceDir = resolveDir(
   process.env.AGENT_WORKSPACE_DIR,
   path.resolve(process.cwd(), "agent_workspace")
 );
-const agentConfigDir = resolveDir(
-  process.env.AGENT_CONFIG_DIR,
-  path.resolve(process.cwd(), "agent_config")
+const agentStateDir = resolveDir(
+  process.env.AGENT_STATE_DIR || process.env.AGENT_CONFIG_DIR,
+  path.resolve(process.cwd(), "agent_state")
+);
+const agentDefaultsDir = resolveDir(
+  process.env.AGENT_DEFAULTS_DIR,
+  path.resolve(process.cwd(), "agent_defaults")
 );
 
 const twilioAuthToken = process.env.SMS_TWILIO_AUTH_TOKEN || process.env.TWILIO_AUTH_TOKEN || "";
@@ -75,14 +79,18 @@ const twilioShouldValidateSignaturesByDefault = Boolean(
 export const config = {
   agent: {
     workspaceDir: agentWorkspaceDir,
-    configDir: agentConfigDir
+    stateDir: agentStateDir,
+    defaultsDir: agentDefaultsDir,
+    // Backward-compatible alias for legacy modules/tools still referencing configDir.
+    configDir: agentStateDir
   },
   memory: {
     maxChars: int(process.env.MEMORY_MAX_CHARS, 6000)
   },
   app: {
     host: process.env.APP_HOST || "127.0.0.1",
-    port: int(process.env.APP_PORT, 8787)
+    port: int(process.env.APP_PORT, 8787),
+    publicBaseUrl: String(process.env.APP_PUBLIC_BASE_URL || "").trim()
   },
   security: {
     requireAuth: bool(process.env.APP_REQUIRE_AUTH, Boolean(process.env.APP_API_TOKEN)),
@@ -90,13 +98,13 @@ export const config = {
     allowUnauthenticatedHealth: bool(process.env.APP_ALLOW_UNAUTHENTICATED_HEALTH, true)
   },
   sessionStore: {
-    sessionsDir: path.resolve(process.env.STORE_DIR || path.resolve(agentConfigDir, "sessions"))
+    sessionsDir: path.resolve(process.env.STORE_DIR || path.resolve(agentStateDir, "sessions"))
   },
   sessionLogs: {
     enabled: bool(process.env.SESSION_LOG_ENABLED, false),
     logsDir: resolveDir(
       process.env.SESSION_LOG_DIR,
-      path.resolve(agentConfigDir, "session_logs")
+      path.resolve(agentStateDir, "session_logs")
     ),
     maxEntryChars: int(process.env.SESSION_LOG_MAX_CHARS, 2000),
     includeSystem: bool(process.env.SESSION_LOG_INCLUDE_SYSTEM, false)
@@ -119,7 +127,7 @@ export const config = {
     ),
     updateStatusFilePath: resolveDir(
       process.env.UPDATE_STATUS_FILE,
-      path.resolve(agentConfigDir, "maintenance", "update-status.json")
+      path.resolve(agentStateDir, "maintenance", "update-status.json")
     ),
     updateCommandTimeoutMs: int(process.env.UPDATE_COMMAND_TIMEOUT_MS, 20 * 60 * 1000),
     updateCommandMaxOutputChars: int(process.env.UPDATE_COMMAND_MAX_OUTPUT_CHARS, 12000)

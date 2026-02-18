@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 import { Readable } from "node:stream";
 
@@ -482,6 +485,120 @@ test("GET /workspace returns agent working directory info", async () => {
     workspaceDir: "/tmp/workspace",
     opencodeDirectory: "/tmp/opencode-workspace"
   });
+});
+
+test("POST /workspace/download-link returns a validated workspace file download URL", async () => {
+  const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "agent-pa-download-link-"));
+  try {
+    const filePath = path.join(workspaceRoot, "exports", "report.txt");
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    await fs.writeFile(filePath, "hello", "utf8");
+
+    const { route } = buildRoute({
+      config: {
+        agent: { workspaceDir: "/tmp/workspace" },
+        opencode: { directory: workspaceRoot }
+      }
+    });
+
+    const response = await invoke(route, {
+      method: "POST",
+      url: "/workspace/download-link",
+      body: {
+        path: "exports/report.txt"
+      }
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(response.json, {
+      ok: true,
+      path: "exports/report.txt",
+      fileName: "report.txt",
+      size: 5,
+      downloadPath: "/workspace/download?path=exports%2Freport.txt",
+      downloadUrl: "http://localhost/workspace/download?path=exports%2Freport.txt"
+    });
+  } finally {
+    await fs.rm(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test("GET /workspace/download returns file bytes as an attachment", async () => {
+  const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "agent-pa-download-file-"));
+  try {
+    const filePath = path.join(workspaceRoot, "exports", "report.txt");
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    await fs.writeFile(filePath, "hello", "utf8");
+
+    const { route } = buildRoute({
+      config: {
+        agent: { workspaceDir: "/tmp/workspace" },
+        opencode: { directory: workspaceRoot }
+      }
+    });
+
+    const response = await invoke(route, {
+      method: "GET",
+      url: "/workspace/download?path=exports%2Freport.txt"
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.headers["content-type"], "application/octet-stream");
+    assert.match(response.headers["content-disposition"], /attachment;/);
+    assert.match(response.headers["content-disposition"], /report\.txt/);
+    assert.equal(response.body, "hello");
+  } finally {
+    await fs.rm(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test("workspace download routes reject traversal paths", async () => {
+  const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "agent-pa-download-safe-"));
+  try {
+    const { route } = buildRoute({
+      config: {
+        agent: { workspaceDir: "/tmp/workspace" },
+        opencode: { directory: workspaceRoot }
+      }
+    });
+
+    const response = await invoke(route, {
+      method: "GET",
+      url: "/workspace/download?path=..%2Fsecret.txt"
+    });
+
+    assert.equal(response.statusCode, 400);
+    assert.equal(response.json.ok, false);
+    assert.match(response.json.error, /workspace-relative/i);
+  } finally {
+    await fs.rm(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test("workspace download routes return 404 for missing files", async () => {
+  const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "agent-pa-download-missing-"));
+  try {
+    const { route } = buildRoute({
+      config: {
+        agent: { workspaceDir: "/tmp/workspace" },
+        opencode: { directory: workspaceRoot }
+      }
+    });
+
+    const response = await invoke(route, {
+      method: "POST",
+      url: "/workspace/download-link",
+      body: {
+        path: "exports/missing.txt"
+      }
+    });
+
+    assert.equal(response.statusCode, 404);
+    assert.equal(response.json.ok, false);
+    assert.match(response.json.error, /File not found/i);
+  } finally {
+    await fs.rm(workspaceRoot, { recursive: true, force: true });
+  }
 });
 
 test("POST /channels/sms/inbound delegates form payload to sms channel service", async () => {

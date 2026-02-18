@@ -244,7 +244,7 @@ export const createUpdateCommandService = ({
   scriptPath = path.resolve(process.cwd(), "deploy/update-server.sh"),
   timeoutMs = DEFAULT_TIMEOUT_MS,
   maxOutputChars = DEFAULT_MAX_OUTPUT_CHARS,
-  statusFilePath = path.resolve(process.cwd(), "agent_config", "maintenance", DEFAULT_PERSIST_FILENAME)
+  statusFilePath = path.resolve(process.cwd(), "agent_state", "maintenance", DEFAULT_PERSIST_FILENAME)
 } = {}) => {
   const resolvedScriptPath = path.resolve(scriptPath);
   const resolvedTimeoutMs = toPositiveInt(timeoutMs, DEFAULT_TIMEOUT_MS);

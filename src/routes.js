@@ -5,6 +5,7 @@ import { sendJson, sendNoContent } from "./http-utils.js";
 import { createSessionRouteHandler } from "./session-routes.js";
 import { createSmsRouteHandler } from "./sms-routes.js";
 import { createStateRouteHandler } from "./state-routes.js";
+import { createWorkspaceRouteHandler } from "./workspace-routes.js";
 
 const normalizeRoutePath = (value) => {
   const raw = String(value || "/").trim();
@@ -31,6 +32,7 @@ export const createRouteHandler = ({
     memoryPreviewChars: config.memory.maxChars
   });
   const handleSmsRoute = createSmsRouteHandler({ smsChannelService });
+  const handleWorkspaceRoute = createWorkspaceRouteHandler({ config });
 
   return async (req, res) => {
     if (!req.url) {
@@ -99,13 +101,7 @@ export const createRouteHandler = ({
         return;
       }
 
-      if (req.method === "GET" && path === "/workspace") {
-        sendJson(res, 200, {
-          workspaceDir: config.agent.workspaceDir,
-          opencodeDirectory: config.opencode?.directory || config.agent.workspaceDir
-        });
-        return;
-      }
+      if (await handleWorkspaceRoute(req, res, path, url)) return;
 
       if (await handleSessionRoute(req, res, path)) return;
       if (await handleStateRoute(req, res, path)) return;

@@ -46,7 +46,7 @@ const normalizePartTypes = (partTypes) => {
 export const createSessionTranscriptLogger = (options = {}) => {
   const enabled = Boolean(options.enabled);
   const logsDir = path.resolve(
-    options.logsDir || path.resolve(process.cwd(), "agent_config/session_logs")
+    options.logsDir || path.resolve(process.cwd(), "agent_state/session_logs")
   );
   const maxEntryChars =
     Number.isInteger(options.maxEntryChars) && options.maxEntryChars > 0

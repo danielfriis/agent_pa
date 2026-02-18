@@ -22,12 +22,21 @@ export const main = async () => {
   }
 
   // Ensure child processes (OpenCode + tools) receive absolute workspace/config paths.
-  process.env.AGENT_CONFIG_DIR = config.agent.configDir;
+  process.env.AGENT_DEFAULTS_DIR = config.agent.defaultsDir;
+  process.env.AGENT_STATE_DIR = config.agent.stateDir;
+  process.env.AGENT_CONFIG_DIR = config.agent.stateDir;
   process.env.AGENT_WORKSPACE_DIR = config.agent.workspaceDir;
   process.env.OPENCODE_DIRECTORY = config.opencode.directory;
+  process.env.AGENT_APP_BASE_URL = (
+    config.app.publicBaseUrl || `http://${config.app.host}:${config.app.port}`
+  ).replace(/\/+$/, "");
 
   const opencodeClient = new OpenCodeClient(config.opencode);
-  const workspace = new AgentWorkspace(config.agent.configDir, config.memory.maxChars);
+  const workspace = new AgentWorkspace({
+    defaultsDir: config.agent.defaultsDir,
+    stateDir: config.agent.stateDir,
+    memoryMaxChars: config.memory.maxChars
+  });
   const sessionStore = new SessionStore(config.sessionStore);
   const sessionTranscriptLogger = createSessionTranscriptLogger(config.sessionLogs);
   const withMemorySystem = createMemorySystemInjector(workspace);
@@ -62,18 +71,20 @@ export const main = async () => {
 
   const syncSkills = () =>
     syncOpenCodeSkills({
-      agentConfigDir: config.agent.configDir,
+      agentDefaultsDir: config.agent.defaultsDir,
+      agentStateDir: config.agent.stateDir,
       opencodeDirectory: config.opencode.directory
     });
 
   const openCodeSync = await syncOpenCodeConfig({
-    agentConfigDir: config.agent.configDir,
+    agentDefaultsDir: config.agent.defaultsDir,
+    agentStateDir: config.agent.stateDir,
     opencodeDirectory: config.opencode.directory
   });
   process.stdout.write(
     `[agent-pa] tool sync: ${openCodeSync.toolSync.syncedCount} file(s), ${openCodeSync.toolSync.removedCount} removed (${openCodeSync.toolSync.targetDir})\n`
   );
-  process.stdout.write(`[agent-pa] tool config dir: ${openCodeSync.toolConfig.sourceDir}\n`);
+  process.stdout.write(`[agent-pa] tool defaults dir: ${openCodeSync.toolConfig.sourceDir}\n`);
   process.stdout.write(
     `[agent-pa] skill sync: ${openCodeSync.skillSync.syncedCount} file(s), ${openCodeSync.skillSync.removedCount} removed (${openCodeSync.skillSync.targetDir})\n`
   );
